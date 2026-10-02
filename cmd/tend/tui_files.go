@@ -18,6 +18,24 @@ const filesTitle = "files"
 // and "tend" may not be on the PATH a pane starts with.
 var filesCommand = []string{"/bin/sh", "-c", `exec "${TEND_BIN_PATH:-tend}" files`}
 
+// filesIconsEnv carries the client's choice of icons to the panel. Which
+// icons can be drawn is a fact about the terminal looking at the panel —
+// a Nerd Font is the viewer's — while the panel runs where the session's
+// server does, and reads that machine's settings: on a remote session one
+// with no settings file at all, so the icons set here never showed there.
+const filesIconsEnv = "TEND_FILES_ICONS"
+
+// filesCommandFor is the panel's command with the client's icons, set on
+// the command line rather than in the pane's environment, which a spec's
+// Env would replace; a tend too old to read it ignores it.
+func filesCommandFor(icons string) []string {
+	switch icons {
+	case "nerd", "emoji", "none":
+		return []string{"/bin/sh", "-c", filesIconsEnv + "=" + icons + ` exec "${TEND_BIN_PATH:-tend}" files`}
+	}
+	return filesCommand
+}
+
 // toggleFiles opens the panel, goes to it, or closes it.
 func (t *tui) toggleFiles() error {
 	t.mu.Lock()
@@ -60,7 +78,7 @@ func (t *tui) toggleFiles() error {
 	delete(t.filesSnoozed, t.tab)
 	share, onRight := t.filesShareLocked(right-left), !t.config.FilesOnLeft()
 	t.mu.Unlock()
-	created, err := t.client.DockPane(focus, share, onRight, proto.PaneSpec{Command: filesCommand, Title: filesTitle})
+	created, err := t.client.DockPane(focus, share, onRight, proto.PaneSpec{Command: filesCommandFor(t.config.Files.Icons), Title: filesTitle})
 	if err != nil {
 		if t.reportStaleServer(err) {
 			return nil
@@ -150,7 +168,7 @@ func (t *tui) ensureFiles() {
 
 	go func() {
 		_, _, err := t.client.DockPaneUnless(focus, share, onRight,
-			proto.PaneSpec{Command: filesCommand, Title: filesTitle}, filesTitle)
+			proto.PaneSpec{Command: filesCommandFor(t.config.Files.Icons), Title: filesTitle}, filesTitle)
 		t.mu.Lock()
 		delete(t.filesEnsuring, tab)
 		t.mu.Unlock()

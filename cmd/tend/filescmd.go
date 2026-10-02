@@ -73,7 +73,7 @@ func runFiles(args []string) error {
 			dock = "left"
 		}
 		return explorer.Settings{
-			Icons: cfg.Files.Icons, Hidden: cfg.Files.Hidden, Follow: cfg.FilesFollow() && !*still,
+			Icons: panelIcons(cfg.Files.Icons, os.Getenv(filesIconsEnv)), Hidden: cfg.Files.Hidden, Follow: cfg.FilesFollow() && !*still,
 			Dock: dock, Width: cfg.FilesWidth(), AutoOpen: cfg.FilesAutoOpen(),
 		}
 	}
@@ -139,4 +139,14 @@ func withoutEnv(env []string, name string) []string {
 		}
 	}
 	return out
+}
+
+// panelIcons is the icons the panel draws: this machine's setting when it
+// has one, else the client's — on a remote machine with no settings file,
+// the choice made for the terminal the panel is drawn on.
+func panelIcons(here, client string) string {
+	if here != "" {
+		return here
+	}
+	return client
 }
