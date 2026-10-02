@@ -5,6 +5,11 @@ release's notes on GitHub and what "what's new" shows inside tend.
 
 ## Unreleased
 
+## v0.14.1 — 2026-10-02
+
+#### Fixed
+- **Icons in the files panel on a remote session.** The panel runs on the remote machine and read its icon setting from there — usually no settings at all, so no icons. It now uses the icons you chose on your own machine when the remote one sets none. Your remote machine needs this version of tend: the next `tend --remote` offers to copy it there.
+
 ## v0.14.0 — 2026-10-01
 
 #### New
