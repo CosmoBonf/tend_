@@ -148,6 +148,7 @@ type Model struct {
 
 	lastClick     time.Time
 	lastClickRow  int
+	press         *treePress
 	now           func() time.Time
 	quit          bool
 	statusErr     error

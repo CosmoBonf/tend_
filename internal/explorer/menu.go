@@ -202,6 +202,11 @@ func (m *Model) promptKey(k Key) {
 // OSC 52 tend passes on to the clipboard of the machine the client is on.
 var clipboardOut io.Writer = os.Stdout
 
+// copyText puts text on the clipboard of the machine the client is on.
+func (m *Model) copyText(text string) {
+	fmt.Fprintf(clipboardOut, "\x1b]52;c;%s\x07", base64.StdEncoding.EncodeToString([]byte(text)))
+}
+
 func (m *Model) runMenu(action menuAction, target *Node) {
 	switch action {
 	case actNewFile, actNewFolder:
@@ -285,7 +290,7 @@ func (m *Model) runMenu(action menuAction, target *Node) {
 		if action == actCopyRelative {
 			path = target.Rel
 		}
-		fmt.Fprintf(clipboardOut, "\x1b]52;c;%s\x07", base64.StdEncoding.EncodeToString([]byte(path)))
+		m.copyText(path)
 		m.say("copied "+path, false)
 	case actRename:
 		old := m.tree.Path(target)

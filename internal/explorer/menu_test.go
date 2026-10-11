@@ -233,3 +233,90 @@ func TestAFileGoesToTheContextFromTheMenu(t *testing.T) {
 		t.Errorf("says why: %q", plain.message)
 	}
 }
+
+// TestDraggingOverTheTreeCopiesThePaths: pressing on a file and dragging
+// copies where it is — the folder down to the file — and a drag over several
+// rows copies each one's, a line apiece; neither previews the file nor opens
+// a folder it passes. If it regresses, selecting a file with the mouse gives
+// the panel's indent and icons, or nothing, instead of a path to paste to an
+// agent.
+func TestDraggingOverTheTreeCopiesThePaths(t *testing.T) {
+	dir := repo(t)
+	opener := &previewingOpener{}
+	m := New(dir, opener)
+	screen(m, 40, 12)
+	var clip bytes.Buffer
+	old := clipboardOut
+	clipboardOut = &clip
+	t.Cleanup(func() { clipboardOut = old })
+	row := func(name string) int {
+		for i, n := range m.fileRows {
+			if n.Name == name {
+				return 2 + i - m.scroll[ViewFiles]
+			}
+		}
+		t.Fatalf("%s not listed", name)
+		return 0
+	}
+	copied := func() string {
+		t.Helper()
+		seq := clip.String()
+		clip.Reset()
+		body, ok := strings.CutPrefix(seq, "\x1b]52;c;")
+		body, ok2 := strings.CutSuffix(body, "\x07")
+		if !ok || !ok2 {
+			t.Fatalf("not an OSC 52 copy: %q", seq)
+		}
+		text, err := base64.StdEncoding.DecodeString(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(text)
+	}
+
+	y := row("kept.txt")
+	m.Mouse(Mouse{X: 4, Y: y, Press: true})
+	m.Mouse(Mouse{X: 9, Y: y, Drag: true})
+	m.Mouse(Mouse{X: 9, Y: y, Release: true})
+	if got, want := copied(), filepath.Join(m.tree.Root, "kept.txt"); got != want {
+		t.Errorf("a drag along kept.txt copied %q, want %q", got, want)
+	}
+	if len(opener.previewed) != 0 {
+		t.Errorf("a drag previewed %v; it should only copy", opener.previewed)
+	}
+
+	from, to := row("src"), row("kept.txt")
+	m.Mouse(Mouse{X: 4, Y: from, Press: true})
+	m.Mouse(Mouse{X: 4, Y: to, Drag: true})
+	if text := screen(m, 40, 12); !strings.Contains(text, "kept.txt") {
+		t.Fatalf("the tree is gone mid-drag:\n%s", text)
+	}
+	m.Mouse(Mouse{X: 4, Y: to, Release: true})
+	var want []string
+	for i := min(from, to) - 2; i <= max(from, to)-2; i++ {
+		want = append(want, m.tree.Path(m.fileRows[i]))
+	}
+	if got := copied(); got != strings.Join(want, "\n") || len(want) < 2 {
+		t.Errorf("a drag from src to kept.txt copied %q, want %q", got, want)
+	}
+	if strings.Contains(screen(m, 40, 12), "changed.go") {
+		t.Error("a drag that began on a folder opened it")
+	}
+
+	// And a click without a drag is still a click.
+	click(m, 4, row("kept.txt"))
+	if clip.Len() != 0 || len(opener.previewed) != 1 {
+		t.Errorf("a click copied %q and previewed %v; it should preview only", clip.String(), opener.previewed)
+	}
+}
+
+// previewingOpener records previews, so a test can tell a click from a drag.
+type previewingOpener struct {
+	recordingOpener
+	previewed []string
+}
+
+func (o *previewingOpener) Preview(path string, line int, dir string) error {
+	o.previewed = append(o.previewed, path)
+	return nil
+}
