@@ -404,21 +404,39 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc   #
 **Update, each time there are changes:**
 
 ```bash
-cd ~/cfdev/tend_
+cd ~/cfdev/tend_          # the checkout: ~/cfdev/tend_ on macOS, /mnt/meu_hd/tend_ on this Linux box
 git pull
 make install INSTALL_DIR=$HOME/.local/bin
 tend handoff
 ```
+
+`make install` rebuilds and overwrites the `tend` in `~/.local/bin` — the
+binary is the whole install, so replacing it is uninstalling the old one.
+Pass `INSTALL_DIR` as the directory the running `tend` came from
+(`command -v tend`), or the build lands somewhere the PATH does not use.
 
 `tend handoff` moves the session onto the new server and keeps what is
 running in the panes. Then leave the client (`ctrl+b d`) and run `tend`
 again, for the new client too.
 
 Do not use `tend update` on a build of this repository: it installs the
-published release, which does not have what is here, over it. For the same
-reason the "update ready" notice is about that release; `[update]
-version_check = false` in the settings file (`tend config` shows where it
-is) turns it off.
+published release, which does not have what is here, over it. Turn the
+updater off in the settings file (`tend config` shows where it is), so
+neither `tend update` nor the background check reaches that release:
+
+```toml
+[update]
+channel = "preview"    # with no preview URL there is no manifest to fetch
+preview = ""
+version_check = false
+```
+
+`version_check = false` alone only silences the "update ready" notice: with
+the default `channel = "stable"` there is still a built-in manifest, and
+`tend update` would install the published release. Naming the preview
+channel with an empty `preview` URL is what empties `ManifestURL()`; then
+`tend update` answers "no manifest for the preview channel" and installs
+nothing.
 
 ## development
 
