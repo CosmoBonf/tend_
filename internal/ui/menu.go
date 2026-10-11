@@ -81,6 +81,30 @@ const (
 	// MenuMCPDo is an action on the MCP manager's row, from its own menu;
 	// Arg is the action and the agent it is for, "action:agent".
 	MenuMCPDo = "menu-mcp-do"
+	// The SSH list's, tend's own: on a connection (its id in the menu's SSH),
+	// connect, edit, duplicate, copy the ssh command, and delete, which asks
+	// again (MenuSSHDeleteYes); on a group (its name in Group), fold and a
+	// new connection in it.
+	MenuSSHConnect   = "menu-ssh-connect"
+	MenuSSHEdit      = "menu-ssh-edit"
+	MenuSSHDuplicate = "menu-ssh-duplicate"
+	MenuSSHCopy      = "menu-ssh-copy"
+	MenuSSHDelete    = "menu-ssh-delete"
+	MenuSSHDeleteYes = "menu-ssh-delete-yes"
+	MenuSSHKeep      = "menu-ssh-keep"
+	MenuSSHNew       = "menu-ssh-new"
+	MenuSSHFold      = "menu-ssh-fold"
+	// MenuSSHMove lists the groups a connection can be moved into, and
+	// MenuSSHMoveTo is one of them, its name in Arg — or no name, for out of
+	// any group; MenuSSHMoveNew asks for a new group's name.
+	MenuSSHMove    = "menu-ssh-move"
+	MenuSSHMoveTo  = "menu-ssh-move-to"
+	MenuSSHMoveNew = "menu-ssh-move-new"
+	// MenuSSHNewGroup makes a group, empty; MenuSSHRenameGroup and
+	// MenuSSHDeleteGroup rename and forget the one in the menu's Group.
+	MenuSSHNewGroup    = "menu-ssh-new-group"
+	MenuSSHRenameGroup = "menu-ssh-rename-group"
+	MenuSSHDeleteGroup = "menu-ssh-delete-group"
 )
 
 // ToolChoice is a tool as the tools menu offers it.
@@ -177,6 +201,73 @@ type Menu struct {
 	// Conversation is the agent conversation a "continue in" menu hands on
 	// when it is not a pane's: one chosen in the sessions list.
 	Conversation string
+	// SSH is the saved SSH connection an SSH menu acts on.
+	SSH string
+}
+
+// SSHMenu is what a right-click on a saved SSH connection offers. open says
+// whether it is open in a space, which "connect" then goes to.
+func SSHMenu(id, name string, open bool, x, y int) Menu {
+	connect := "connect"
+	if open {
+		connect = "go to it"
+	}
+	return Menu{Title: name, SSH: id, X: x, Y: y, Items: []MenuItem{
+		{Label: connect, Action: MenuSSHConnect},
+		{Label: "edit...", Action: MenuSSHEdit},
+		{Label: "move to group...", Action: MenuSSHMove},
+		{Label: "duplicate", Action: MenuSSHDuplicate},
+		{Label: "copy ssh command", Action: MenuSSHCopy},
+		{Label: "delete", Action: MenuSSHDelete},
+	}}
+}
+
+// SSHMoveMenu lists where a connection can go: each group but the one it is
+// in, out of its group when it is in one, and a new group.
+func SSHMoveMenu(id, name, current string, groups []string, x, y int) Menu {
+	var items []MenuItem
+	for _, g := range groups {
+		if g != current {
+			items = append(items, MenuItem{Label: g, Action: MenuSSHMoveTo, Arg: g})
+		}
+	}
+	if current != "" {
+		items = append(items, MenuItem{Label: "out of " + current, Action: MenuSSHMoveTo})
+	}
+	items = append(items, MenuItem{Label: "new group...", Action: MenuSSHMoveNew})
+	return Menu{Title: "move " + name + " to", SSH: id, X: x, Y: y, Items: items}
+}
+
+// SSHDeleteMenu asks once more before a connection, and its password, are
+// forgotten.
+func SSHDeleteMenu(id, name string, x, y int) Menu {
+	return Menu{Title: "delete " + name + "?", SSH: id, X: x, Y: y, Items: []MenuItem{
+		{Label: "yes, delete it", Action: MenuSSHDeleteYes},
+		{Label: "no", Action: MenuSSHKeep},
+	}}
+}
+
+// SSHGroupMenu is what a right-click on an SSH group offers.
+func SSHGroupMenu(group string, folded bool, x, y int) Menu {
+	fold := "fold"
+	if folded {
+		fold = "unfold"
+	}
+	return Menu{Title: group, Group: group, X: x, Y: y, Items: []MenuItem{
+		{Label: fold, Action: MenuSSHFold},
+		{Label: "new connection here...", Action: MenuSSHNew},
+		{Label: "rename group...", Action: MenuSSHRenameGroup},
+		{Label: "delete group", Action: MenuSSHDeleteGroup},
+	}}
+}
+
+// SSHNewMenu is what the ssh list's "new" offers: a connection, or a group
+// to put connections in — a folder made first, as in Ásbrú.
+func SSHNewMenu(x, y int) Menu {
+	return Menu{Title: "new", X: x, Y: y, Items: []MenuItem{
+		{Label: "new connection...", Action: MenuSSHNew},
+		{Label: "new group...", Action: MenuSSHNewGroup},
+	}}
 }
 
 // menuPadding is the space either side of a label inside the border.

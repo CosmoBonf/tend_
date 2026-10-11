@@ -252,6 +252,10 @@ type tui struct {
 	// space belongs to is a session fact; which of them this person has
 	// folded away is not, so it is never sent upstream.
 	folded map[string]bool
+	// ssh is the SSH list's client state (tui_ssh.go): whether the top list
+	// shows it, its groups folded, the form, and which space each open
+	// connection is in. All of it this person's, none of it sent.
+	ssh sshState
 
 	prompt         promptKind
 	promptText     string
@@ -837,6 +841,8 @@ func (t *tui) Event(ev proto.Event) {
 		}()
 	case proto.EventPaneExited:
 		go func() {
+			// A connection's pane ends when q was answered: its space goes.
+			t.sshPaneExited(ev.Pane)
 			if err := t.refresh(); err != nil {
 				t.setMessage(err.Error(), true)
 			}
@@ -1148,6 +1154,8 @@ func (t *tui) buildFrame() ui.Frame {
 		Issues:       t.issues,
 		Errors:       t.errors,
 		Context:      t.contextView,
+		SSHForm:      t.ssh.form,
+		EmptyHint:    t.emptyHintLocked(),
 		UpdateReady:  t.updateReadyLocked() != "",
 		Navigator:    t.navigatorFrameLocked(),
 		Toast:        t.toastFrameLocked(),
@@ -1368,6 +1376,9 @@ func (t *tui) handleInput(data []byte) error {
 	}
 	if t.contextUp() {
 		return t.contextInput(data)
+	}
+	if t.sshFormUp() {
+		return t.sshFormInput(data)
 	}
 	forward, commands, mice := t.keys.FeedAll(data)
 	if len(forward) > 0 {

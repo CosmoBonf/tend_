@@ -453,6 +453,9 @@ func (t *tui) newTabHere() error {
 // spacesSectionLocked is the top list: the heading, the tree, and the button
 // that makes another one.
 func (t *tui) spacesSectionLocked() ui.SidebarSection {
+	if t.ssh.list {
+		return t.sshSectionLocked()
+	}
 	rows := []ui.SidebarRow{t.spacesHeadingLocked()}
 	newLabel := "new"
 	if t.multiMachineLocked() {
@@ -478,6 +481,9 @@ func (t *tui) spacesSectionLocked() ui.SidebarSection {
 			Action:         ui.ActionNewSpace,
 			Trailing:       menu,
 			TrailingAction: ui.ActionOpenMenu,
+			// tend's own: the SSH connections, in this list's place.
+			Switch:       t.listSwitchLocked(),
+			SwitchAction: ui.ActionSwitchList,
 		}},
 		Scroll: t.spacesScroll,
 	}
@@ -1343,4 +1349,17 @@ func (t *tui) paneShell() []string {
 		return nil
 	}
 	return t.config.Shell()
+}
+
+// emptyHintLocked is what an empty space says: how to put a terminal in it.
+// Not for a session with no space at all, which the client makes one for.
+func (t *tui) emptyHintLocked() string {
+	if _, ok := t.workspaceLocked(); !ok || t.offline {
+		return ""
+	}
+	prefix := t.config.Keys.Prefix
+	if prefix == "" {
+		prefix = "ctrl+b"
+	}
+	return "empty space · " + prefix + " c opens a terminal"
 }

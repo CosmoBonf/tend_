@@ -82,6 +82,7 @@ func (t *tui) menuFor(x, y int) (ui.Menu, bool) {
 	panes := len(t.rects)
 	groups := t.hasGroupsLocked()
 	agentAt := t.paneAgentsLocked()
+	sshList := t.ssh.list
 	t.mu.Unlock()
 
 	if row, ok := ui.SidebarRowAt(frame, x, y, rows); ok {
@@ -97,6 +98,14 @@ func (t *tui) menuFor(x, y int) (ui.Menu, bool) {
 			return ui.GroupMenu(row.Group, row.Folded, tildeHome(t.groupDirLocked(row.Group)), x, y), true
 		case ui.SidebarAgent:
 			return ui.AgentMenu(row.Pane, row.Tab, row.Workspace, x, y), true
+		case ui.SidebarSSH:
+			return ui.SSHMenu(row.SSH, row.Label, row.Running, x, y), true
+		case ui.SidebarSSHGroup:
+			return ui.SSHGroupMenu(row.Group, row.Folded, x, y), true
+		case ui.SidebarHeading:
+			if sshList {
+				return ui.SSHNewMenu(x, y), true
+			}
 		}
 		return ui.Menu{}, false
 	}
@@ -197,6 +206,71 @@ func (t *tui) moveMenu(delta int) {
 // runMenu performs an item against the menu's target.
 func (t *tui) runMenu(m ui.Menu, item ui.MenuItem) error {
 	switch item.Action {
+	case ui.MenuSSHConnect:
+		return t.connectSSH(m.SSH)
+	case ui.MenuSSHEdit:
+		t.openSSHForm(m.SSH, false, "")
+		return nil
+	case ui.MenuSSHDuplicate:
+		t.openSSHForm(m.SSH, true, "")
+		return nil
+	case ui.MenuSSHNew:
+		t.openSSHForm("", false, m.Group)
+		return nil
+	case ui.MenuSSHFold:
+		t.toggleSSHGroup(m.Group)
+		return nil
+	case ui.MenuSSHNewGroup:
+		t.startPrompt(promptSSHNewGroup)
+		return nil
+	case ui.MenuSSHRenameGroup:
+		t.mu.Lock()
+		t.promptGroup = m.Group
+		t.mu.Unlock()
+		t.startPrompt(promptSSHRenameGroup)
+		return nil
+	case ui.MenuSSHDeleteGroup:
+		t.sshDeleteGroup(m.Group)
+		return nil
+	case ui.MenuSSHMove:
+		t.mu.Lock()
+		c, ok := t.ssh.store.Find(m.SSH)
+		groups := t.ssh.store.Groups()
+		t.mu.Unlock()
+		if ok {
+			t.openMenu(ui.SSHMoveMenu(c.ID, c.Name, c.Group, groups, m.X, m.Y))
+		}
+		return nil
+	case ui.MenuSSHMoveTo:
+		t.moveSSH(m.SSH, item.Arg)
+		return nil
+	case ui.MenuSSHMoveNew:
+		// The form, on its group field, empty for the new name.
+		t.openSSHFormAt(m.SSH, false, "", ui.SSHFieldGroup)
+		t.mu.Lock()
+		if f := t.ssh.form; f != nil {
+			f.Fields[ui.SSHFieldGroup] = ""
+		}
+		t.mu.Unlock()
+		return nil
+	case ui.MenuSSHCopy:
+		t.mu.Lock()
+		c, ok := t.ssh.store.Find(m.SSH)
+		t.mu.Unlock()
+		if ok {
+			go t.copyToClipboard(c.Command(), "copied the ssh command")
+		}
+		return nil
+	case ui.MenuSSHDelete:
+		// Asked again where the menu was: a connection and its password are
+		// not something to lose to a stray click.
+		t.openMenu(ui.SSHDeleteMenu(m.SSH, m.Title, m.X, m.Y))
+		return nil
+	case ui.MenuSSHDeleteYes:
+		t.deleteSSH(m.SSH)
+		return nil
+	case ui.MenuSSHKeep:
+		return nil
 	case ui.MenuGoTo:
 		return t.jumpToPane(m.Pane)
 

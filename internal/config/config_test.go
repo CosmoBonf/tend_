@@ -217,6 +217,23 @@ func TestExampleIsValid(t *testing.T) {
 	}
 }
 
+// TestExampleOffersTheNerdFontIcons: the icons are off by default, and the
+// settings file tend writes is where people look for the switch. Without
+// [files] in it, someone with a Nerd Font sees letters on the sidebar's tools
+// and no hint that "nerd" exists.
+func TestExampleOffersTheNerdFontIcons(t *testing.T) {
+	c, err := LoadFile(writeConfig(t, Example))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Files.Icons != "none" || c.FilesWidth() != 32 || !c.FilesFollow() || !c.FilesAutoOpen() || c.FilesOnLeft() {
+		t.Errorf("the example's [files] should be the defaults, got %+v", c.Files)
+	}
+	if !strings.Contains(Example, `"nerd"`) {
+		t.Error(`the example should name the "nerd" icons`)
+	}
+}
+
 func TestPathRespectsOverride(t *testing.T) {
 	t.Setenv("TEND_CONFIG", "/tmp/somewhere/else.toml")
 	got, err := Path()

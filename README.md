@@ -209,6 +209,27 @@ agent list, clicking a row goes there — a pane, a tab, or a whole space. A pan
 running something that wants the mouse itself, an editor say, gets the clicks
 instead.
 
+### ssh connections
+
+`⇄ ssh`, beside `menu` at the foot of the spaces list, turns that list into
+your saved SSH connections, in groups; `⇄ dev` turns it back. `new` makes a
+group (a folder, empty until you put connections in it) or a connection:
+a name, a group, the host, port and user, and a password for a machine that
+takes no key (leave it empty and ssh uses your keys as always). A click opens
+the connection logged in, in a space of its own — or goes to it when it is
+open, marked `●`. When ssh ends, enter connects again and `q` closes the
+space. Right-click a connection to edit, move it to another group,
+duplicate, copy its ssh command or delete it; right-click a group for a new
+connection in it, or to rename or delete it (its connections are kept). In the form, the group field offers the groups there are:
+click one, or ← →. Or drag a connection onto a group's heading to file it
+there, or onto a connection in no group to take it out.
+
+The connections are kept in `ssh.toml` beside the settings file, readable by
+you alone; a password is in it as typed, and ssh is given it by tend through
+`SSH_ASKPASS`, never on a command line. A connection with a password trusts a
+machine it has never seen (`StrictHostKeyChecking=accept-new`; a key that
+changed is still refused) and works in a session on this machine.
+
 ### what agents did, and rules for them
 
 The session server keeps a record of every agent: when it started and
