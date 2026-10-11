@@ -342,7 +342,9 @@ func (t *tui) runMenu(m ui.Menu, item ui.MenuItem) error {
 		t.mu.Lock()
 		current, groups := t.groupOfLocked(m.Workspace), []string(nil)
 		for _, g := range groupsIn(&t.snap) {
-			groups = append(groups, g.Name)
+			if g.Name != sshGroup { // the ssh list's, not a place for work
+				groups = append(groups, g.Name)
+			}
 		}
 		t.mu.Unlock()
 		t.openMenu(ui.GroupPickMenu(m.Workspace, current, groups, m.X, m.Y))

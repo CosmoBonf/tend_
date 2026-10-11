@@ -3,13 +3,16 @@
 package main
 
 import (
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/auth-com-br/tend/internal/pty"
 	"github.com/auth-com-br/tend/internal/sshconn"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // TestAnSSHConnectionIsSavedOpenedLoggedInAndClosed is the SSH list from end
@@ -295,4 +298,64 @@ func TestAConnectionIsDraggedIntoAGroup(t *testing.T) {
 			t.Errorf("%s is in %q, want none", c.Name, c.Group)
 		}
 	}
+}
+
+// TestTheSpacesListLeavesTheConnectionsOut: a connection's space is the ssh
+// list's, so the spaces list shows neither it nor the "ssh" group it is
+// kept in, and a client started after it was opened still knows it is open.
+// If it regresses, the spaces list carries an "ssh" group the owner asked to
+// be rid of, or reopening tend opens the connection a second time.
+func TestTheSpacesListLeavesTheConnectionsOut(t *testing.T) {
+	bin, store := t.TempDir(), filepath.Join(t.TempDir(), "ssh.toml")
+	if err := os.WriteFile(filepath.Join(bin, "ssh"), []byte("#!/bin/sh\necho FAKE SSH; exec sleep 30\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	var s sshconn.Store
+	s.Put(sshconn.Connection{Name: "box", Host: "box.example"})
+	if err := sshconn.Save(store, s); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(sshconn.PathEnv, store)
+
+	a := startSession(t, 100, 30)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	y := a.lineContaining(t, "⇄ ssh")
+	a.clickAt(t, columnOfString(a.lines()[y-1], "⇄ ssh")+2, y)
+	a.waitForScreen(t, "the list", func(string) bool { return strings.Contains(a.sidebarText(), "○ box") })
+	a.clickAt(t, 5, a.lineContaining(t, "○ box"))
+	a.waitForScreen(t, "connected", func(s string) bool { return strings.Contains(s, "FAKE SSH") })
+
+	y = a.lineContaining(t, "⇄ dev")
+	a.clickAt(t, columnOfString(a.lines()[y-1], "⇄ dev")+2, y)
+	a.waitForScreen(t, "the spaces", func(string) bool { return strings.Contains(a.sidebarText(), "main") })
+	if side := a.sidebarText(); strings.Contains(side, "ssh\n") || strings.Contains(side, "▼ ssh") || strings.Contains(side, "box") {
+		t.Errorf("the spaces list shows the connection or its group:\n%s", side)
+	}
+
+	// A new client, which never saw the connection opened, still marks it
+	// open and goes to it rather than opening it again.
+	a.send(t, "\x02d")
+	b := attachAgain(t, 100, 30)
+	b.waitForScreen(t, "the session again", func(string) bool { return strings.Contains(b.sidebarText(), "⇄ ssh") })
+	y = b.lineContaining(t, "⇄ ssh")
+	b.clickAt(t, columnOfString(b.lines()[y-1], "⇄ ssh")+2, y)
+	b.waitForScreen(t, "box marked open", func(string) bool { return strings.Contains(b.sidebarText(), "● box") })
+}
+
+// attachAgain is another client on the session startSession made, as
+// running tend again is.
+func attachAgain(t *testing.T, cols, rows int) *attached {
+	t.Helper()
+	p, err := pty.Start(buildBinary(t), []string{"attach", "-s", "tui"}, pty.Options{
+		Size: pty.Size{Cols: uint16(cols), Rows: uint16(rows)},
+		Env:  append(os.Environ(), "SHELL=/bin/sh", "TERM=xterm-256color"),
+	})
+	if err != nil {
+		t.Fatalf("attaching again: %v", err)
+	}
+	a := &attached{pty: p, screen: vt.NewScreen(cols, rows, 200)}
+	go func() { _, _ = io.Copy(a, p) }()
+	t.Cleanup(func() { _ = p.Close() })
+	return a
 }

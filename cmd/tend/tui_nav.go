@@ -574,7 +574,12 @@ func (t *tui) spaceRowsFrom(src spaceSource) []ui.SidebarRow {
 
 	// With a company chosen, the session being shown lists its spaces
 	// only; another machine's list is its own session's, and has none.
-	shown := func(w proto.WorkspaceInfo) bool { return !here || t.shownLocked(w.ID) }
+	// The SSH connections' spaces are the ssh list's (tend's own, tui_ssh.go),
+	// reached from there: listed here as well, as a group called "ssh", they
+	// were the same thing twice in the place for the work.
+	shown := func(w proto.WorkspaceInfo) bool {
+		return !here || t.shownLocked(w.ID) && w.Group != sshGroup
+	}
 
 	// A group with no space in the list is still listed when it is the
 	// user's to see: always with no company chosen, and with one when the
@@ -596,7 +601,7 @@ func (t *tui) spaceRowsFrom(src spaceSource) []ui.SidebarRow {
 		}
 	}
 	unplaced := func(g proto.GroupInfo) bool {
-		return !placed[g.Name] && (!chosen || slices.Contains(g.Companies, company))
+		return !placed[g.Name] && (!chosen || slices.Contains(g.Companies, company)) && !(here && g.Name == sshGroup)
 	}
 	var emit func(name string)
 	flushBefore := func(name string) {
