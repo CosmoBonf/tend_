@@ -46,8 +46,13 @@ func TestAScriptCanDriveAPaneAndReadItBack(t *testing.T) {
 		t.Fatalf("split returned %v", res)
 	}
 
+	// What is waited for is what the shell prints, which the line typed does
+	// not contain: the terminal echoes a line before the shell has even
+	// started, and a wait that the echo satisfied sent the ctrl+c below to a
+	// shell not yet interactive, which it killed (macOS, where sh takes a
+	// moment longer to start; the test failed one run in three there).
 	call(t, h, MethodPaneSendText, map[string]any{
-		"pane_id": id, "text": "printf hello-from-a-script\n",
+		"pane_id": id, "text": "printf 'hello-%s\\n' from-a-script\n",
 	})
 	res = result(t, call(t, h, MethodPaneWaitForOutput, map[string]any{
 		"pane_id": id, "contains": "hello-from-a-script", "timeout_ms": 5000,
@@ -69,7 +74,7 @@ func TestAScriptCanDriveAPaneAndReadItBack(t *testing.T) {
 	// ctrl+c reaches the program as a signal, not as the letter c.
 	call(t, h, MethodPaneSendText, map[string]any{"pane_id": id, "text": "sleep 9"})
 	call(t, h, MethodPaneSendKeys, map[string]any{"pane_id": id, "keys": []string{"ctrl+c"}})
-	call(t, h, MethodPaneSendText, map[string]any{"pane_id": id, "text": "printf after-ctrl-c\n"})
+	call(t, h, MethodPaneSendText, map[string]any{"pane_id": id, "text": "printf 'after-%s\\n' ctrl-c\n"})
 	res = result(t, call(t, h, MethodPaneWaitForOutput, map[string]any{
 		"pane_id": id, "contains": "after-ctrl-c", "timeout_ms": 5000,
 	}))
