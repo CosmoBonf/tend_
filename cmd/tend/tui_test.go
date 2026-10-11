@@ -3145,9 +3145,11 @@ func TestANewTabOnAnotherMachineRunsThatMachinesShell(t *testing.T) {
 }
 
 // TestTheSidebarsEdgeDragsToAWidth: dragging the rule down the sidebar's
-// right edge makes the sidebar that wide, within herdr's 18 to 36, with the
-// panes beside it following; a double click on the edge puts it back. If it
-// regresses, the sidebar is the one width whatever the names in it need.
+// right edge — or the pane border against it, which looks like the same
+// line — makes the sidebar that wide, within 18 to 60, with the panes beside
+// it following; a double click on the edge puts it back. If it regresses,
+// the sidebar is the one width whatever the names in it need, or a drag on
+// the border beside the rule does nothing.
 func TestTheSidebarsEdgeDragsToAWidth(t *testing.T) {
 	a := startSession(t, 100, 20)
 	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
@@ -3171,14 +3173,21 @@ func TestTheSidebarsEdgeDragsToAWidth(t *testing.T) {
 		return len(line) > 34 && line[33] == '│' && line[25] != '│'
 	})
 
-	a.dragFromTo(t, 0, 34, 7, 90, 7)
-	a.waitForScreen(t, "no wider than 36", func(s string) bool {
+	// The pane's border, one column past the rule, takes the edge as well.
+	a.dragFromTo(t, 0, 35, 7, 40, 7)
+	a.waitForScreen(t, "the sidebar 40 wide, dragged by the pane's border", func(s string) bool {
 		line := []rune(strings.Split(s, "\n")[6])
-		return len(line) > 36 && line[35] == '│'
+		return len(line) > 40 && line[39] == '│'
 	})
 
-	a.clickAt(t, 36, 7)
-	a.clickAt(t, 36, 7)
+	a.dragFromTo(t, 0, 40, 7, 95, 7)
+	a.waitForScreen(t, "no wider than 60", func(s string) bool {
+		line := []rune(strings.Split(s, "\n")[6])
+		return len(line) > 60 && line[59] == '│'
+	})
+
+	a.clickAt(t, 60, 7)
+	a.clickAt(t, 60, 7)
 	a.waitForScreen(t, "a double click puts it back", func(s string) bool {
 		line := []rune(strings.Split(s, "\n")[6])
 		return len(line) > 26 && line[25] == '│'
@@ -3340,4 +3349,21 @@ func TestAClickOnAPanelsCloseMarkClosesIt(t *testing.T) {
 	x, y = closeMark()
 	a.clickAt(t, x, y)
 	a.waitForScreen(t, "the sessions gone", func(s string) bool { return !strings.Contains(s, "AGENT SESSIONS") })
+}
+
+// TestAnEmptySpaceSaysHowToFillIt: closing a space's last pane leaves the
+// space, empty, by design; the screen says how to put a terminal back, and
+// the key does. If it regresses, an empty space is a blank screen that no
+// pane key answers, which the owner took for tend's keys having stopped.
+func TestAnEmptySpaceSaysHowToFillIt(t *testing.T) {
+	a := startSession(t, 100, 24)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.send(t, "\x02x")
+	a.waitForScreen(t, "the hint", func(s string) bool {
+		return !strings.Contains(s, "┌") && strings.Contains(s, "empty space · ctrl+b c opens a terminal")
+	})
+	a.send(t, "\x02c")
+	a.waitForScreen(t, "a terminal again", func(s string) bool {
+		return strings.Contains(s, "┌") && !strings.Contains(s, "empty space")
+	})
 }

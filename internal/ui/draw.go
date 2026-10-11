@@ -349,6 +349,10 @@ type Frame struct {
 	// hidden: a frozen screen with no explanation is the worst version of
 	// this, because the user cannot tell it from an agent that has stopped.
 	Offline bool
+	// EmptyHint is said in the middle of the screen when the space shown has
+	// no pane at all. A blank area answers no key that acts on a pane, and
+	// with nothing to say why, tend looked as if its keys had stopped.
+	EmptyHint string
 	// Scroll is how far back a pane is being read, and ScrollDepth how far it
 	// could go. Both are shown: a view that says only "scrolled" leaves the
 	// user unable to tell a glance back from being lost in a long history.
@@ -441,6 +445,8 @@ type Frame struct {
 	Errors *ErrorsView
 	// Context is the context panel, when it is up (contextpanel.go).
 	Context *ContextView
+	// SSHForm is the SSH connection form, when it is up (sshform.go).
+	SSHForm *SSHForm
 	// UpdateReady puts herdr's "update ready" at the right of the status
 	// bar, from when a release is found until it is running.
 	UpdateReady bool
@@ -623,6 +629,9 @@ func Draw(dst *vt.Grid, f Frame, theme Theme) {
 	for _, p := range f.Panes {
 		drawPane(dst, p, theme)
 	}
+	if len(f.Panes) == 0 && f.EmptyHint != "" {
+		drawEmptyHint(dst, f, theme)
+	}
 	drawStatus(dst, f, theme)
 
 	// Over the panes but under everything that floats: the selection marks
@@ -680,6 +689,9 @@ func Draw(dst *vt.Grid, f Frame, theme Theme) {
 	}
 	if f.FolderPick != nil {
 		drawFolderPick(dst, *f.FolderPick, theme)
+	}
+	if f.SSHForm != nil {
+		drawSSHForm(dst, f.SSHForm, theme)
 	}
 	if f.Menu != nil {
 		drawMenu(dst, *f.Menu, theme)
@@ -1248,4 +1260,15 @@ func fill(dst *vt.Grid, y, from, to int, style vt.Style) {
 	for x := max(from, 0); x < min(to, dst.Cols()); x++ {
 		row.SetCell(x, vt.Cell{R: ' ', Style: style, Width: 1})
 	}
+}
+
+// drawEmptyHint puts the empty space's hint in the middle of where the panes
+// would be.
+func drawEmptyHint(dst *vt.Grid, f Frame, theme Theme) {
+	left := SidebarColumns(f, dst.Cols())
+	width := dst.Cols() - left
+	rows := max(dst.Rows()-StatusRows, 1)
+	text := truncate(f.EmptyHint, max(width-2, 0))
+	x := left + max((width-runewidth.StringWidth(text))/2, 0)
+	writeString(dst, x, rows/2, text, theme.SidebarDetail, dst.Cols())
 }

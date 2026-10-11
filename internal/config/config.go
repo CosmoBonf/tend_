@@ -541,7 +541,9 @@ type UI struct {
 	HideTabBarWhenSingleTab bool   `toml:"hide_tab_bar_when_single_tab"`
 	// SidebarWidth is the sidebar's width in columns, and SidebarMinWidth
 	// and SidebarMaxWidth the bounds dragging its edge keeps it within:
-	// herdr's, 26, 18 and 36.
+	// herdr's 26 and 18, and 60 for the most rather than herdr's 36 — at 36
+	// an SSH connection's user@host was still cut, and the owner dragged
+	// for more and took the edge for broken.
 	SidebarWidth    int `toml:"sidebar_width"`
 	SidebarMinWidth int `toml:"sidebar_min_width"`
 	SidebarMaxWidth int `toml:"sidebar_max_width"`
@@ -584,7 +586,7 @@ func (c Config) SidebarBounds() (int, int) {
 		lo = 18
 	}
 	if hi <= 0 {
-		hi = 36
+		hi = 60
 	}
 	return lo, hi
 }
@@ -1074,7 +1076,7 @@ grouped = false
 # make it. A double click on the edge puts it back to sidebar_width.
 # sidebar_width = 26
 # sidebar_min_width = 18
-# sidebar_max_width = 36
+# sidebar_max_width = 60
 
 # What goes at the right end of the tab bar, in order. Types: zoom (ZOOM
 # while a pane is zoomed), hostname, datetime (format is strftime, "%H:%M"
@@ -1152,6 +1154,22 @@ sleep_after = "30m"
 # Where "tend worktree create" puts a new checkout, as
 # <directory>/<repository>/<branch>.
 directory = "~/.tend/worktrees"
+
+[files]
+# The files panel (prefix+f) and the tools over the sidebar.
+# Their icons: "none" (letters), "nerd" for a Nerd Font's glyphs, or "emoji",
+# which every terminal draws. Choose "nerd" only when the terminal's font is
+# a Nerd Font: a glyph the font lacks is drawn as a box.
+icons = "none"
+# The columns it opens at, and the edge it docks on, "right" or "left".
+width = 32
+dock = "right"
+# Follow the project of the pane beside it.
+follow = true
+# Open in every tab by itself; false opens it only on prefix+f.
+auto_open = true
+# Hide entries whose name starts with a dot.
+hidden = false
 
 [notify]
 # How to say that an agent finished or needs answering:

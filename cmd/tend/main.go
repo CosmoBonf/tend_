@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/auth-com-br/tend/internal/sshconn"
 )
 
 // version is stamped at build time from git; see the Makefile. The fallback
@@ -113,6 +115,13 @@ func launchArgs(args []string) ([]string, error) {
 }
 
 func main() {
+	// Started by ssh as its SSH_ASKPASS, with the question as the only
+	// argument: no command line of tend's at all, so this comes before any
+	// is read (sshaskpass.go).
+	if id := os.Getenv(sshconn.AskpassEnv); id != "" {
+		os.Exit(runSSHAskpass(id, os.Args[1:]))
+	}
+
 	// Bare "tend" opens a session, starting a server if there is none. Asking
 	// someone to run a daemon before they can use the thing is a step that
 	// exists only because of how it is built.

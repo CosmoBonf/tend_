@@ -5,6 +5,17 @@ release's notes on GitHub and what "what's new" shows inside tend.
 
 ## Unreleased
 
+#### New
+- **SSH connections in the sidebar.** `⇄ ssh`, beside **menu** at the foot of the spaces list, shows your saved SSH connections instead, in groups; `⇄ dev` goes back. **new** makes a group — a folder, empty until you fill it — or a connection: host, port, user, and a password for a machine with no key. A click opens it already logged in, in a space of its own (● while it is open); when the connection ends, enter connects again and `q` closes the space. Right-click to edit, move to another group, duplicate, copy the ssh command or delete; in the form, the groups there are are offered to click; or drag a connection onto a group. Kept in `ssh.toml` beside the settings, readable by you alone.
+- **Copy a file's path with the mouse.** In the files panel, press on a file or folder and drag: letting go copies its full path, from the folder down to the file, ready to paste to an agent. Drag over several rows to copy each one's path, a line apiece; the rows are highlighted as you go. A click without a drag still previews or opens, as before.
+
+#### Fixed
+- **An empty space says how to fill it.** Closing a space's last pane leaves the space, empty — and the screen was blank, with no key that acts on a pane doing anything, so tend looked frozen. It now says "empty space · ctrl+b c opens a terminal".
+- **The sidebar's edge drags from either line.** The sidebar's right edge and the pane's border beside it look like one line, and only the first one dragged; now both do. And it widens to 60 columns, where it stopped at 36.
+- **Agents started at a prompt are recognised on macOS.** tend could only see which program was running in a pane on Linux, so on a Mac typing `claude` in a shell left the sidebar showing a shell. It now asks macOS too — and an agent shipped as a script (codex, under node) is known by its own name.
+- **On macOS, panes come back where they were, and the files panel follows the pane beside it.** The directory a pane's program is in could only be read on Linux; a restored pane started where it was first opened, and the panel stayed on its first project.
+- **The Nerd Font icons can be found.** The icons on the files panel and the sidebar's tools are off until `[files] icons = "nerd"` is set, and the settings file tend writes did not mention it, so with a Nerd Font you saw letters and no hint why. The file now has a `[files]` section that says so. The settings screen (`ctrl+b s` → files icons) changes it too.
+
 #### Removed
 - **`tend gui-bridge` and the desktop app experiment.** The Neutralino window on a session was a proof of concept that is not being taken further; the command that served it is gone with it. Nothing else used it.
 

@@ -40,6 +40,13 @@ const (
 	// SidebarMachine is a saved machine, with its spaces beneath it: herdr's
 	// endpoint row, shown once there is more than one machine to be on.
 	SidebarMachine
+	// SidebarSSH is a saved SSH connection, with where it goes beneath: the
+	// ssh list, which the top list switches to (tend's own, after Ásbrú).
+	SidebarSSH
+	// SidebarSSHGroup is a heading over SSH connections filed together,
+	// which folds. It is not a space group: folding one must not fold a
+	// space group that happens to share its name.
+	SidebarSSHGroup
 )
 
 // Action names carried on an action row.
@@ -57,6 +64,16 @@ const (
 	// ActionCompanies is the mark beside the "spaces" heading: the
 	// companies panel, which chooses what the list shows.
 	ActionCompanies = "companies"
+	// ActionSwitchList is the button beside "menu" that turns the top list
+	// from the spaces to the SSH connections and back.
+	ActionSwitchList = "switch-list"
+	// ActionSSHNew opens the form for a new SSH connection.
+	ActionSSHNew = "ssh-new"
+	// ActionSSHConnect opens the connection the row names, or goes to it
+	// when it is open.
+	ActionSSHConnect = "ssh-connect"
+	// ActionSSHToggleGroup folds or unfolds an SSH group.
+	ActionSSHToggleGroup = "ssh-toggle-group"
 )
 
 // SidebarRow is one entry. A two-line entry is one row: the detail is drawn
@@ -71,6 +88,11 @@ type SidebarRow struct {
 	// not what clicking the rest of the row does.
 	Trailing       string
 	TrailingAction string
+	// Switch is a second button, just before Trailing: the footer's list
+	// switch, beside its "menu". "menu" keeps the edge it has always had, so
+	// a hand that knows where it is does not land on the switch instead.
+	Switch       string
+	SwitchAction string
 
 	// Pane, Tab and Workspace say where selecting this row goes. Action names
 	// what it does instead.
@@ -90,6 +112,8 @@ type SidebarRow struct {
 	// something only on its own machine, so a row with a Machine is one to go
 	// to, never one to act on here.
 	Machine string
+	// SSH is the saved SSH connection a row is, by its identifier.
+	SSH string
 	// Stale marks a row whose machine cannot be reached: what it shows is
 	// the last that was heard, dimmed as herdr dims it.
 	Stale bool
@@ -132,11 +156,11 @@ func (r SidebarRow) height() int {
 // repository name and a state marker, narrow enough to cost a pane little.
 const SidebarWidth = 26
 
-// The bounds a dragged sidebar is kept within, herdr's sidebar_min_width
-// and sidebar_max_width defaults.
+// The bounds a dragged sidebar is kept within: herdr's sidebar_min_width,
+// and a sidebar_max_width of 60 where herdr's is 36 (config.SidebarBounds).
 const (
 	SidebarMinWidth = 18
-	SidebarMaxWidth = 36
+	SidebarMaxWidth = 60
 )
 
 // sidebarWidthOf is the sidebar's width in a frame.
@@ -145,6 +169,20 @@ func sidebarWidthOf(f Frame) int {
 		return f.SidebarWidth
 	}
 	return SidebarWidth
+}
+
+// SidebarEdgeAt is whether a press there takes hold of the sidebar's edge:
+// the rule down its right side, or the pane border drawn against it.
+//
+// The two are side by side and look like one line. Only the first used to
+// answer, so half the presses meant for the edge landed on the pane's
+// border and did nothing — and the edge was taken for one that does not
+// drag. Not on the tab bar's row, whose first column is the tab bar's.
+func SidebarEdgeAt(f Frame, x, y, rows int) bool {
+	if SidebarPlaceAt(f, x, y, rows) == SidebarEdge {
+		return true
+	}
+	return f.Sidebar && x == sidebarWidthOf(f) && y < SidebarHeight(rows) && y != TabBarRow(f, rows)
 }
 
 // SidebarWidthAt is the width a drag of the sidebar's edge to column x
@@ -177,6 +215,23 @@ func TrailingStart(r SidebarRow, width int) int {
 	}
 	at := width - 2 - len([]rune(r.Trailing))
 	if at <= 1 {
+		return -1
+	}
+	return at
+}
+
+// SwitchStart is the column a row's switch starts at, or -1 when it has none
+// or there is no room for it. Drawing and hit-testing both ask this.
+func SwitchStart(r SidebarRow, width int) int {
+	if r.Switch == "" {
+		return -1
+	}
+	trailing := width - 1
+	if r.Trailing != "" {
+		trailing = TrailingStart(r, width)
+	}
+	at := trailing - 1 - len([]rune(r.Switch))
+	if trailing < 0 || at <= 1 {
 		return -1
 	}
 	return at
@@ -651,7 +706,7 @@ func drawSidebarRow(dst *vt.Grid, r SidebarRow, y, limit int, theme Theme) {
 	case SidebarGroup:
 		writeString(dst, 3, y, truncate(r.Label, limit-3), theme.SidebarGroup, limit)
 
-	case SidebarSpaceGroup:
+	case SidebarSpaceGroup, SidebarSSHGroup:
 		// The triangle points at what it will do: down when the group is open
 		// and its spaces are below, right when it is shut and they are not.
 		marker := "▼ "
@@ -695,9 +750,56 @@ func drawSidebarRow(dst *vt.Grid, r SidebarRow, y, limit int, theme Theme) {
 		}
 		writeString(dst, 1, y, truncate(r.Label, limit-1), style, limit)
 		drawTrailing(dst, r, y, limit, theme)
+		drawSwitch(dst, r, y, limit, theme)
 
 	case SidebarSpace, SidebarAgent:
 		drawSidebarEntry(dst, r, y, limit, theme)
+
+	case SidebarSSH:
+		drawSSHEntry(dst, r, y, limit, theme)
+	}
+}
+
+// drawSwitch puts a row's switch beside its button, in the accent: it changes
+// what the whole list is, which is worth finding.
+func drawSwitch(dst *vt.Grid, r SidebarRow, y, limit int, theme Theme) {
+	if at := SwitchStart(r, limit+1); at >= 0 {
+		writeString(dst, at, y, r.Switch, theme.SidebarGroupActive, limit)
+	}
+}
+
+// drawSSHEntry is a saved connection: a mark that is filled while it is open
+// in a space, its name, and where it goes beneath, as a space shows its
+// branch. Running is "open"; Active is the space in view being this one.
+func drawSSHEntry(dst *vt.Grid, r SidebarRow, y, limit int, theme Theme) {
+	cursor := " "
+	if r.Selected {
+		cursor = "›"
+	}
+	style, detail := theme.Sidebar, theme.SidebarDetail
+	mark, glyph := theme.SidebarDetail, " ○ "
+	if r.Running {
+		mark, glyph = theme.Idle, " ● "
+	}
+	if r.Active {
+		style = theme.SidebarSelected
+		mark, detail = style, style
+		fill(dst, y, 0, limit, style)
+		if r.Detail != "" {
+			fill(dst, y+1, 0, limit, style)
+		}
+	}
+	x := writeString(dst, 0, y, cursor, style, limit)
+	if r.DropHere {
+		// A connection dropped here joins this one's group.
+		writeString(dst, 0, y, "▎", theme.BorderFocused, limit)
+	}
+	x = writeString(dst, x, y, indent(r.Depth), style, limit)
+	x = writeString(dst, x, y, glyph, mark, limit)
+	writeString(dst, x, y, truncate(r.Label, limit-x), style, limit)
+	if r.Detail != "" {
+		at := 3 + 2*r.Depth
+		writeString(dst, at, y+1, truncate(r.Detail, limit-at), detail, limit)
 	}
 }
 
@@ -987,6 +1089,10 @@ func rowInSection(s SidebarSection, region Rect, width, handleRow, x, y int) (Si
 func resolveTrailing(r SidebarRow, width, x, y, top int) SidebarRow {
 	if start := TrailingStart(r, width); r.TrailingAction != "" && start >= 0 && x >= start && y == top {
 		r.Action = r.TrailingAction
+		return r
+	}
+	if start := SwitchStart(r, width); r.SwitchAction != "" && start >= 0 && x >= start && y == top {
+		r.Action = r.SwitchAction
 	}
 	return r
 }

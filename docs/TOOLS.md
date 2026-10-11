@@ -237,6 +237,32 @@ Spaces can be kept in named groups (**new group...** on a space's menu). A
 group stays until you delete it, can have a folder its new spaces start in,
 and its menu moves it, with its spaces, to another company.
 
+## SSH connections
+
+The SSH list, tend's own after Ásbrú Connection Manager: `⇄ ssh`, beside
+`menu` at the foot of the spaces list, turns that list into your saved SSH
+connections, in groups; `⇄ dev` turns it back. `new` makes a group (a folder,
+empty until you put connections in it) or a connection: a name, a group, the
+host, port and user, and a password for a machine that takes no key (leave it
+empty and ssh uses your keys as always).
+
+A click opens the connection logged in, in a space of its own — or goes to it
+when it is open, marked `●`. When ssh ends, enter connects again and `q`
+closes the space. Right-click a connection to edit, move it to another group,
+duplicate, copy its ssh command or delete it; right-click a group for a new
+connection in it, or to rename or delete it (its connections are kept). In
+the form, the group field offers the groups there are: click one, or ← →. Or
+drag a connection onto a group's heading to file it there, or onto a
+connection in no group to take it out.
+
+The connections are kept in `ssh.toml` beside the settings file, readable by
+you alone; a password is in it as typed, and ssh is given it by tend through
+`SSH_ASKPASS`, never on a command line, in the pane's environment or in the
+saved session. Keys are tried first, so a machine a key logs in to works even
+when the saved password is wrong; a connection with a password trusts a
+machine it has never seen (`StrictHostKeyChecking=accept-new`; a key that
+changed is still refused), and a refused password is not offered twice.
+
 ## The navigator
 
 `ctrl+b g` is every space, tab and pane in one list over the screen, each
@@ -314,4 +340,4 @@ ctrl+click on a web link a pane printed — a URL, or words a program linked
 held, the link under the pointer is underlined.
 
 The sidebar's right edge can be dragged to make it wider or narrower (18 to
-36 columns); a double click on it puts it back to `[ui] sidebar_width`.
+60 columns); a double click on it puts it back to `[ui] sidebar_width`.

@@ -38,6 +38,10 @@ const (
 	// promptOpenURL asks for a page to open in the browser (tui_browser.go),
 	// the last one opened already in the box.
 	promptOpenURL
+	// promptSSHNewGroup names a new group of SSH connections, and
+	// promptSSHRenameGroup renames the one in promptGroup (tui_ssh.go).
+	promptSSHNewGroup
+	promptSSHRenameGroup
 )
 
 // startPrompt opens the prompt, seeded with the current name.
@@ -93,7 +97,7 @@ func (t *tui) startPrompt(kind promptKind) {
 				t.promptText = p.Title
 			}
 		}
-	case promptRenameGroup:
+	case promptRenameGroup, promptSSHRenameGroup:
 		t.promptText = t.promptGroup
 	case promptGroupDir:
 		t.promptText = t.groupDirLocked(t.promptGroup)
@@ -301,6 +305,14 @@ func (t *tui) commitPrompt() error {
 			return nil
 		}
 		return t.renameGroup(group, name)
+	case promptSSHNewGroup:
+		t.sshAddGroup(name)
+		return nil
+	case promptSSHRenameGroup:
+		if group != "" {
+			t.sshRenameGroup(group, name)
+		}
+		return nil
 	case promptGroupDir:
 		if group == "" {
 			return nil
@@ -335,6 +347,10 @@ func (t *tui) promptLabelLocked() string {
 		return "folder for " + t.promptGroup
 	case promptOpenURL:
 		return "open in browser"
+	case promptSSHNewGroup:
+		return "new ssh group — name"
+	case promptSSHRenameGroup:
+		return "rename ssh group"
 	}
 	return ""
 }

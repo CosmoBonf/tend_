@@ -1409,6 +1409,44 @@ func TestSidebarFooterStaysAtTheBottom(t *testing.T) {
 	}
 }
 
+// TestTheFooterSwitchSitsBesideMenuAndIsItsOwnTarget: the button that turns
+// the top list to the SSH connections is drawn just before "menu", which
+// keeps its place at the edge, and each of the three — new, the switch,
+// menu — answers its own click. If it regresses, a click where "menu" has
+// always been switches the list instead.
+func TestTheFooterSwitchSitsBesideMenuAndIsItsOwnTarget(t *testing.T) {
+	const rows = 24
+	f := sidebarFrame(spaceRows(2), []SidebarRow{{Kind: SidebarHeading, Label: "agents"}})
+	f.Spaces.Footer = []SidebarRow{{
+		Kind: SidebarAction, Label: "new", Action: ActionNewSpace,
+		Trailing: "menu", TrailingAction: ActionOpenMenu,
+		Switch: "⇄ ssh", SwitchAction: ActionSwitchList,
+	}}
+	spaces, _ := SidebarRegions(f, rows)
+	foot := spaces.Y + spaces.Rows - 1
+	g := vt.NewGrid(40, rows, 0)
+	Draw(g, f, DefaultTheme())
+	line := gridText(g)[foot]
+	if !strings.Contains(line, "new") || !strings.Contains(line, "⇄ ssh menu") {
+		t.Fatalf("the footer should read new … ⇄ ssh menu:\n%q", line)
+	}
+	if TrailingStart(f.Spaces.Footer[0], SidebarWidth) != SidebarWidth-2-len("menu") {
+		t.Error("menu should keep its place at the edge")
+	}
+	r := f.Spaces.Footer[0]
+	for x, want := range map[int]string{
+		2:                                  ActionNewSpace,
+		TrailingStart(r, SidebarWidth):     ActionOpenMenu,
+		TrailingStart(r, SidebarWidth) + 3: ActionOpenMenu,
+		SwitchStart(r, SidebarWidth):       ActionSwitchList,
+		SwitchStart(r, SidebarWidth) + 4:   ActionSwitchList,
+	} {
+		if row, ok := SidebarRowAt(f, x, foot, rows); !ok || row.Action != want {
+			t.Errorf("a click at column %d did %q, want %q", x, row.Action, want)
+		}
+	}
+}
+
 // TestSidebarGivesTheRoomToSpaces: a space is a place that goes on existing,
 // an agent is what happens to be running, and there are rarely many at once.
 func TestSidebarGivesTheRoomToSpaces(t *testing.T) {

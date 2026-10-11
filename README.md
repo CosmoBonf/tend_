@@ -102,6 +102,7 @@ And without a key:
 |---|---|
 | [Sleeping agents](docs/TOOLS.md#sleeping-agents) | after a restart an agent starts only when you go to it, and an idle one gives its memory back |
 | [Your phone](docs/TOOLS.md#your-phone) | `tend web`: follow the agents and message them from a phone |
+| [SSH connections](docs/TOOLS.md#ssh-connections) | saved hosts beside the spaces list; a click opens one logged in, in a space of its own |
 | [Handing work on](docs/TOOLS.md#handing-work-to-another-agent) | **continue in...** on a pane's menu starts another agent where this one stopped |
 | [Activity and policies](docs/TOOLS.md#activity-and-policies) | `tend activity`: what agents did and what it cost; `[policy]`: where they may work |
 

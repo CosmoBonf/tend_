@@ -1,3 +1,5 @@
+//go:build unix
+
 package main
 
 import (
@@ -5,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/auth-com-br/tend/internal/sshconn"
 )
 
 // TestMain turns the first-run welcome off for every tend these tests start:
@@ -27,6 +31,10 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	os.Setenv("TEND_CONFIG", path)
+	// The SSH connections too: a test that opens the ssh list without
+	// naming its own file must not read, or save over, the user's, which
+	// holds their passwords. One did read them, once.
+	os.Setenv(sshconn.PathEnv, filepath.Join(dir, "ssh.toml"))
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)

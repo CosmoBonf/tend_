@@ -443,7 +443,7 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 		return nil
 
 	case ui.MouseDrag:
-		if t.dragTab(ev) || t.dragSpace(ev) {
+		if t.dragTab(ev) || t.dragSpace(ev) || t.dragSSH(ev) {
 			return nil
 		}
 		if took, err := t.continueGesture(ev); took {
@@ -465,6 +465,9 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 			return err
 		}
 		if dropped, err := t.dropSpace(); dropped {
+			return err
+		}
+		if dropped, err := t.dropSSH(); dropped {
 			return err
 		}
 		// paneAt takes the same lock, so the grab is released first and the
@@ -622,11 +625,12 @@ func (t *tui) grabSidebarDivider(x, y int) bool {
 	if !t.sidebar {
 		return false
 	}
-	switch ui.SidebarPlaceAt(t.buildFrame(), x, y, t.rows) {
-	case ui.SidebarDivider:
+	frame := t.buildFrame()
+	switch {
+	case ui.SidebarPlaceAt(frame, x, y, t.rows) == ui.SidebarDivider:
 		t.draggingSidebar = true
 		return true
-	case ui.SidebarEdge:
+	case ui.SidebarEdgeAt(frame, x, y, t.rows):
 		// herdr's sidebar divider: a drag sets the width, a double click
 		// puts it back to the settings' (client/shell/mouse.rs).
 		now := time.Now()
@@ -816,6 +820,20 @@ func (t *tui) clickSidebar(x, y int) (bool, error) {
 		// Another machine's space or agent: going there is going to the
 		// machine.
 		return true, t.switchMachine(row.Machine, row.Workspace, row.Pane)
+	case row.Action == ui.ActionSwitchList:
+		t.switchList()
+		return true, nil
+	case row.Action == ui.ActionSSHNew:
+		// A connection, or a group to put connections in.
+		t.openMenu(ui.SSHNewMenu(x, y))
+		return true, nil
+	case row.Action == ui.ActionSSHConnect:
+		// Opened when the button comes up, unless it was dragged to a group.
+		t.pressSSH(row.SSH)
+		return true, nil
+	case row.Action == ui.ActionSSHToggleGroup:
+		t.toggleSSHGroup(row.Group)
+		return true, nil
 	case row.Action == ui.ActionNewSpace:
 		return true, t.newWorkspace()
 	case row.Action == ui.ActionToggleGroup:
