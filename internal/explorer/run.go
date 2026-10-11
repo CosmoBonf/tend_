@@ -17,11 +17,12 @@ import (
 const refreshEvery = 2 * time.Second
 
 // Terminal modes the panel sets and puts back: the alternate screen, so the
-// pane's history is left as it was; mouse clicks and the wheel, in SGR's
+// pane's history is left as it was; mouse clicks, the wheel and drags (a
+// drag over the tree copies paths, so clicks alone are not enough), in SGR's
 // encoding, which has no column limit; the cursor hidden.
 const (
-	enterScreen = "\x1b[?1049h\x1b[?1000h\x1b[?1006h\x1b[?25l"
-	leaveScreen = "\x1b[?1006l\x1b[?1000l\x1b[?25h\x1b[?1049l"
+	enterScreen = "\x1b[?1049h\x1b[?1002h\x1b[?1006h\x1b[?25l"
+	leaveScreen = "\x1b[?1006l\x1b[?1002l\x1b[?25h\x1b[?1049l"
 )
 
 // Run runs the explorer on the terminal until it is told to quit.

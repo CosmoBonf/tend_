@@ -20,7 +20,10 @@ type Mouse struct {
 	Button  int
 	Press   bool
 	Release bool
-	Wheel   int // -1 up, +1 down
+	// Drag is the pointer moving with a button held: a drag over the tree
+	// copies the paths it covers.
+	Drag  bool
+	Wheel int // -1 up, +1 down
 }
 
 // Parse reads keys (Key) and mouse reports (Mouse) out of what the terminal
@@ -167,8 +170,7 @@ func csiEvent(params string, final byte) any {
 				m.Wheel = -1
 			}
 		case code&32 != 0:
-			// Motion with a button held, which the explorer does not use.
-			return nil
+			m.Drag = true
 		case final == 'm':
 			m.Release = true
 		default:
@@ -202,6 +204,16 @@ const doubleClick = 400 * time.Millisecond
 
 // Mouse handles a click or a turn of the wheel.
 func (m *Model) Mouse(ev Mouse) {
+	if m.press != nil && (ev.Drag || ev.Release) {
+		// A gesture begun on the tree is the tree's until the button comes
+		// up, wherever the pointer goes meanwhile: over the activity bar,
+		// a release would otherwise be the bar's and the click never land.
+		if m.bar {
+			ev.Y -= barRows
+		}
+		m.treeGesture(ev)
+		return
+	}
 	// Under the activity bar, the panel is where it always was, two rows
 	// lower: a press on the bar is the bar's, and anything else is moved
 	// up to the rows the rest of this reads.
@@ -219,6 +231,11 @@ func (m *Model) Mouse(ev Mouse) {
 			return // the project's name, where the git bar would be
 		}
 		ev.Y = max(ev.Y-barRows, 0)
+	}
+	if ev.Drag || ev.Release {
+		// Everywhere but the tree acts on the press and has no use for the
+		// rest of the gesture.
+		return
 	}
 	switch m.mode {
 	case modeViewer:
@@ -317,27 +334,13 @@ func (m *Model) Mouse(ev Mouse) {
 	m.lastClick, m.lastClickRow = now, i
 	m.message = ""
 	if m.view == ViewFiles {
+		// The press selects; what the click does waits for the button to
+		// come up, because the press may be the start of a drag that copies
+		// paths instead. Acting on the press would preview the file — a tab
+		// that takes the screen — before the drag had begun.
 		m.cursor[ViewFiles] = i
 		n := m.fileRows[i]
-		switch {
-		case n.Dir:
-			// One click opens a directory, as in an editor's explorer: there
-			// is nothing else to do to one.
-			m.tree.Toggle(n, m.git)
-			m.layout()
-			m.lastClick = time.Time{}
-		case double:
-			m.open(m.tree.Path(n), 0)
-			m.lastClick = time.Time{}
-		default:
-			// One click previews, as herdr-sidebar's does. The preview
-			// is a tab of its own and takes the screen, so a second click
-			// lands there rather than here: o in the preview, or enter
-			// on the panel, is how a file is opened for editing.
-			if _, ok := m.opener.(Previewer); ok {
-				m.preview(n.Rel, m.tree.Path(n), 0)
-			}
-		}
+		m.press = &treePress{from: n, to: n, double: double}
 		m.clamp()
 		return
 	}
@@ -350,6 +353,115 @@ func (m *Model) Mouse(ev Mouse) {
 		m.showDiff(m.changeRows[i])
 		m.lastClick = time.Time{}
 	}
+}
+
+// treePress is a press on the tree waiting for its button to come up: a
+// click if the pointer stayed put, a drag over rows if it moved.
+type treePress struct {
+	from, to *Node
+	double   bool
+	dragged  bool
+}
+
+// treeGesture follows a press on the tree to its release. A drag selects the
+// rows between where it began and where the pointer is, and letting go copies
+// their full paths, one a line — the panel's answer to selecting text with
+// the mouse, which in a program that holds the mouse would give the indent
+// and the icons rather than where the file is. Without a drag the release
+// is the click: a folder opens, a file is previewed, or opened on a second.
+func (m *Model) treeGesture(ev Mouse) {
+	p := m.press
+	if m.mode != modeList || m.view != ViewFiles || len(m.fileRows) == 0 {
+		m.press = nil
+		return
+	}
+	if ev.Drag {
+		// The client keeps the pointer inside the pane; here it is kept on
+		// the rows shown, so dragging past the last one takes the last.
+		top := m.scroll[ViewFiles]
+		last := min(top+m.listRows(), len(m.fileRows)) - 1
+		i := min(max(top+ev.Y-2, top), last)
+		p.to, p.dragged = m.fileRows[i], true
+		m.cursor[ViewFiles] = i
+		return
+	}
+	m.press = nil
+	if p.dragged {
+		m.copyPaths(p.from, p.to)
+		return
+	}
+	m.clickFile(p.from, p.double)
+}
+
+// dragRange is the rows a drag in progress covers, first to last, or -1 and
+// -1 with none.
+func (m *Model) dragRange() (int, int) {
+	p := m.press
+	if p == nil || !p.dragged {
+		return -1, -1
+	}
+	from, to := m.rowOf(p.from), m.rowOf(p.to)
+	if from < 0 || to < 0 {
+		return -1, -1
+	}
+	return min(from, to), max(from, to)
+}
+
+// rowOf is where a node is on the tree as listed now, or -1. The tree is
+// read again every two seconds, so a row number from the press may no
+// longer be the same entry by the release; the node is.
+func (m *Model) rowOf(n *Node) int {
+	for i, r := range m.fileRows {
+		if r == n {
+			return i
+		}
+	}
+	return -1
+}
+
+// copyPaths puts the full paths of the rows from one node to another on the
+// clipboard, by the same OSC 52 the menu's "Copy path" writes.
+func (m *Model) copyPaths(from, to *Node) {
+	paths := []string{m.tree.Path(from)}
+	if lo, hi := m.rowOf(from), m.rowOf(to); lo >= 0 && hi >= 0 {
+		paths = paths[:0]
+		for i := min(lo, hi); i <= max(lo, hi); i++ {
+			paths = append(paths, m.tree.Path(m.fileRows[i]))
+		}
+	}
+	m.copyText(strings.Join(paths, "\n"))
+	if len(paths) == 1 {
+		m.say("copied "+paths[0], false)
+	} else {
+		m.say("copied "+strconv.Itoa(len(paths))+" paths", false)
+	}
+}
+
+// clickFile is a click on a row of the tree, acted on as the button comes up.
+func (m *Model) clickFile(n *Node, double bool) {
+	if m.rowOf(n) < 0 {
+		return // gone from the tree between press and release
+	}
+	switch {
+	case n.Dir:
+		// One click opens a directory, as in an editor's explorer: there
+		// is nothing else to do to one.
+		m.tree.Toggle(n, m.git)
+		m.layout()
+		m.lastClick = time.Time{}
+	case double:
+		m.open(m.tree.Path(n), 0)
+		m.lastClick = time.Time{}
+	default:
+		// One click previews, as herdr-sidebar's does. The preview
+		// is a tab of its own and takes the screen, so a second click
+		// lands there rather than here: o in the preview, or enter
+		// on the panel, is how a file is opened for editing.
+		if _, ok := m.opener.(Previewer); ok {
+			m.preview(n.Rel, m.tree.Path(n), 0)
+		}
+	}
+	m.clamp()
 }
 
 // searchMouse answers a click in the search view: the query line starts

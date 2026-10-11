@@ -93,6 +93,13 @@ func (o *recordingOpener) Open(path string, line int) error {
 	return nil
 }
 
+// click is a press and its release where the pointer pressed, as a terminal
+// sends one.
+func click(m *Model, x, y int) {
+	m.Mouse(Mouse{X: x, Y: y, Press: true})
+	m.Mouse(Mouse{X: x, Y: y, Release: true})
+}
+
 func keys(m *Model, names ...string) {
 	for _, n := range names {
 		k := Key{Name: n}
@@ -393,7 +400,7 @@ func TestSearchFindsAFileByPartOfItsName(t *testing.T) {
 // and a sequence cut between two reads is kept for the next. If it
 // regresses, an arrow key typed fast arrives as escape, [ and A.
 func TestParseReadsKeysAndClicks(t *testing.T) {
-	events, rest := Parse([]byte("j\x1b[A\x1b[<0;5;3M\x1b[<0;5;3m\x1b[<65;1;1M\r\x7fé\x1b[5~\x1b[<0;1"))
+	events, rest := Parse([]byte("j\x1b[A\x1b[<0;5;3M\x1b[<32;6;3M\x1b[<0;5;3m\x1b[<65;1;1M\r\x7fé\x1b[5~\x1b[<0;1"))
 	var names []string
 	for _, ev := range events {
 		switch e := ev.(type) {
@@ -407,10 +414,12 @@ func TestParseReadsKeysAndClicks(t *testing.T) {
 				names = append(names, "press@"+string(rune('0'+e.X))+","+string(rune('0'+e.Y)))
 			case e.Release:
 				names = append(names, "release")
+			case e.Drag:
+				names = append(names, "drag@"+string(rune('0'+e.X)))
 			}
 		}
 	}
-	want := "j up press@4,2 release wheel2 enter backspace é pgup"
+	want := "j up press@4,2 drag@5 release wheel2 enter backspace é pgup"
 	if got := strings.Join(names, " "); got != want {
 		t.Errorf("events = %q, want %q", got, want)
 	}
@@ -439,16 +448,16 @@ func TestClicksSelectOpenAndSwitch(t *testing.T) {
 		t.Fatalf("%s not listed", name)
 		return 0
 	}
-	m.Mouse(Mouse{X: 5, Y: row("kept.txt"), Press: true})
+	click(m, 5, row("kept.txt"))
 	if m.selectedNode().Name != "kept.txt" || len(opener.opened) != 0 {
 		t.Fatalf("one click selects: %s %v", m.selectedNode().Name, opener.opened)
 	}
 	clock = clock.Add(100 * time.Millisecond)
-	m.Mouse(Mouse{X: 5, Y: row("kept.txt"), Press: true})
+	click(m, 5, row("kept.txt"))
 	if len(opener.opened) != 1 {
 		t.Errorf("a double click opens: %v", opener.opened)
 	}
-	m.Mouse(Mouse{X: 5, Y: row("src"), Press: true})
+	click(m, 5, row("src"))
 	screen(m, 40, 12)
 	if !strings.Contains(screen(m, 40, 12), "changed.go") {
 		t.Errorf("a click opens a directory")

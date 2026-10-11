@@ -207,6 +207,9 @@ func (m *Model) drawFiles(g *vt.Grid) {
 	if len(m.fileRows) == 0 {
 		put(g, 2, 2, "empty directory", styleDim, m.cols)
 	}
+	// The rows a drag covers are drawn selected, so what letting go will
+	// copy is in view.
+	lo, hi := m.dragRange()
 	for i := 0; i < rows; i++ {
 		at := m.scroll[v] + i
 		if at >= len(m.fileRows) {
@@ -214,7 +217,7 @@ func (m *Model) drawFiles(g *vt.Grid) {
 		}
 		n := m.fileRows[at]
 		y := 2 + i
-		m.drawFileRow(g, y, n, at == m.cursor[v])
+		m.drawFileRow(g, y, n, at == m.cursor[v] || at >= lo && at <= hi)
 	}
 }
 
