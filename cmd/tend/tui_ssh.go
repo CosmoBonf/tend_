@@ -21,8 +21,9 @@ import (
 // are folded, and which space each connection is open in are this person's
 // and are never sent to the server.
 
-// sshGroup is the space group the connections' spaces are kept in, so the
-// spaces list stays the work's and the connections sit together in it.
+// sshGroup is the space group the connections' spaces are kept in. The
+// spaces list leaves it out (spaceRowsFrom): those spaces are reached from
+// the ssh list, and the spaces list is the work's.
 const sshGroup = "ssh"
 
 // sshState is the SSH list's client state.
@@ -81,17 +82,35 @@ func (t *tui) sshSaveLocked() bool {
 
 // sshOpenLocked is where a connection is open, if it still is: a space
 // closed by other means is forgotten here as well.
+//
+// A client started after the connection was opened has no record of it, so
+// the session is asked: a space in the ssh group named after the connection
+// is it, and its first pane is ssh's. Without that, reopening tend lost the
+// ● and a second click opened the connection twice.
 func (t *tui) sshOpenLocked(id string) (sshOpen, bool) {
-	o, ok := t.ssh.open[id]
+	if o, ok := t.ssh.open[id]; ok {
+		for _, w := range t.snap.Workspaces {
+			if w.ID == o.workspace {
+				return o, true
+			}
+		}
+		delete(t.ssh.open, id)
+	}
+	c, ok := t.ssh.store.Find(id)
 	if !ok {
 		return sshOpen{}, false
 	}
 	for _, w := range t.snap.Workspaces {
-		if w.ID == o.workspace {
-			return o, true
+		if w.Group != sshGroup || w.Name != c.Name || len(w.Tabs) == 0 || len(w.Tabs[0].Panes) == 0 {
+			continue
 		}
+		o := sshOpen{workspace: w.ID, pane: w.Tabs[0].Panes[0]}
+		if t.ssh.open == nil {
+			t.ssh.open = make(map[string]sshOpen)
+		}
+		t.ssh.open[id] = o
+		return o, true
 	}
-	delete(t.ssh.open, id)
 	return sshOpen{}, false
 }
 
@@ -321,6 +340,15 @@ func (t *tui) sshPaneExited(pane uint64) bool {
 		if o.pane == pane {
 			ws = o.workspace
 			delete(t.ssh.open, id)
+		}
+	}
+	if ws == 0 {
+		// Opened before this client started: a space of the ssh group whose
+		// first pane this is was opened as a connection.
+		for _, w := range t.snap.Workspaces {
+			if w.Group == sshGroup && len(w.Tabs) > 0 && len(w.Tabs[0].Panes) > 0 && w.Tabs[0].Panes[0] == pane {
+				ws = w.ID
+			}
 		}
 	}
 	t.mu.Unlock()
