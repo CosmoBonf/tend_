@@ -5,9 +5,20 @@ release's notes on GitHub and what "what's new" shows inside tend.
 
 ## Unreleased
 
-## v0.14.1 — 2026-10-02
+## v0.15.0 — 2026-10-11
+
+#### New
+- **Agents sleep until you go to them.** After a restart every agent used to start again at once, and with many of them that ran a machine out of memory. Now each comes back **asleep**: its pane is there, with its name and `z` beside it, and the agent starts — in the conversation it was in — the moment you go to the pane. An agent idle with nobody looking at it goes to sleep by itself after 30 minutes. To put one to sleep yourself: right-click its pane or its line in the agents list and choose **sleep (free its memory)**, or **menu → sleep an agent...** to pick one, or every idle one at once; tend says how much memory came back. `[agents] sleep_after` sets the time (`"0"` for never) and `sleep_restored = false` starts them all, as before.
+- **What each agent may do without asking, in one place.** `ctrl+b P` — or **menu → agent permissions** — shows the permission rules of Claude Code, Codex, Cursor, Gemini CLI, OpenCode and the DeepSeek Harness, a tab an agent, for your whole machine and for the project of the pane you are in. Change a rule between allow, ask and deny, move it between files, add one, remove one, and set the agent's modes. **Open any of the files in an editor**, chosen as you open it: nano, vim and the like open beside your pane and the panel comes back when you close them; gedit, VS Code and the like open in a window. Files are edited safely (the agent's own lock, a backup a day). `[[permissions.files]]` lists the file of an agent tend does not know, and `tend perm list` prints it all.
+- **Your agents on your phone.** `tend web` serves a page for a phone on your home network or your VPN: the agents of every company with what each is doing, one agent's screen live, a box to send it a message, the keys an agent asks for (Enter, Esc, 1–9, arrows, Tab), and wake and sleep. It buzzes when an agent needs you or finishes. Pair the phone by opening the address `tend web` prints, or set a login and password with `tend web -set-password`. It reaches agents only, with a fixed list of actions — never a shell. It is plain HTTP: use it on a network you trust, or through a VPN.
+- **The DeepSeek Harness** (`dsh`) is an agent tend knows: in the agent manager and in **new agent here...**, with its state read from its screen, and its MCP servers in the MCP manager beside the others'.
+- **Copy and paste on the pane's menu.** Right-click a pane: **copy** when text is selected in it, and **paste**, which takes what is on your system's clipboard.
+- **Move a group to another company.** A group's menu moves it, with its spaces, to the company you choose.
 
 #### Fixed
+- **The wheel scrolls programs that redraw the whole screen.** A program on the alternate screen that does not ask for the mouse — the DeepSeek Harness, `less`, `man` — could not be scrolled with the wheel at all. The wheel now reaches it as the arrow keys, as terminals do.
+- **An agent started through node, bun, python or a shell is recognised** by its script: `node …/bin/dsh` is dsh.
+- **Aider starts from "new agent here...".** An agent tend has no screen rules for was refused; it now starts, without a state.
 - **Icons in the files panel on a remote session.** The panel runs on the remote machine and read its icon setting from there — usually no settings at all, so no icons. It now uses the icons you chose on your own machine when the remote one sets none. Your remote machine needs this version of tend: the next `tend --remote` offers to copy it there.
 
 ## v0.14.0 — 2026-10-01
