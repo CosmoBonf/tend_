@@ -130,7 +130,9 @@ These are herdr's rules and they are enforced here by where code lives:
 - No `panic` in production paths. Errors are returned and named
   (`session.ErrNoSuchPane`, `proto.ErrUnknownMethod`).
 - New dependencies need a reason. Current ones: `creack/pty`, `BurntSushi/toml`,
-  `mattn/go-runewidth`, `golang.org/x/term`.
+  `mattn/go-runewidth`, `golang.org/x/term`, `gopkg.in/yaml.v3` (the DeepSeek
+  Harness's MCP servers are in a hand-written YAML file, edited keeping its
+  comments).
 - Platform code is compile-gated by filename (`foreground_linux.go`,
   `foreground_other.go`), not by runtime checks.
 - Every behaviour change comes with a test. Test names are sentences, and the

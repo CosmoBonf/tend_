@@ -2,6 +2,8 @@
 
 package pty
 
+import "syscall"
+
 // Foreground has no implementation here yet.
 //
 // The terminal knows its foreground process group everywhere that has
@@ -11,6 +13,9 @@ package pty
 // right for a pane opened as an agent and wrong only for one opened as a
 // shell — a smaller gap than guessing.
 func (p *Pty) Foreground() string { return "" }
+
+// ForegroundArgv has no implementation here either, for the same reason.
+func (p *Pty) ForegroundArgv() []string { return nil }
 
 // Process is one process in the terminal's foreground group.
 type Process struct {
@@ -30,3 +35,13 @@ type ProcessInfo struct {
 
 // Processes reports the shell only.
 func (p *Pty) Processes() ProcessInfo { return ProcessInfo{ShellPid: p.Pid()} }
+
+// ChildForeground cannot be told here: without the foreground group, a
+// pane's agent is taken to be its own process.
+func (p *Pty) ChildForeground() int { return 0 }
+
+// SignalGroup has no implementation here.
+func SignalGroup(int, syscall.Signal) error { return syscall.ENOSYS }
+
+// GroupMemory cannot be read without /proc.
+func GroupMemory(int) int64 { return 0 }

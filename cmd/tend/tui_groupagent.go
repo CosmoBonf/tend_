@@ -76,14 +76,27 @@ func (t *tui) startAgentInGroup(group, id string) error {
 		program = agent.ID
 	}
 	err := t.newWorkspaceRunning(group, agent.Name, agent.Name, func(dir string) proto.PaneSpec {
-		return proto.PaneSpec{
-			Command: []string{"/bin/sh", "-c", resumeScript, "tend-agent", program},
-			Dir:     dir,
-			Agent:   agent.ID,
-		}
+		return groupAgentSpec(agent, program, dir)
 	})
 	if err != nil {
 		t.setMessage(agent.Name+" did not start: "+refusalText(err), true)
 	}
 	return nil
+}
+
+// groupAgentSpec is the pane an agent is started in: the agent with the
+// arguments it is started with (dsh --profile tui), a shell left when it
+// exits, and the agent's name for its states only when tend has rules for
+// it — a pane named as an agent with none is refused, which made Aider fail
+// to start at all.
+func groupAgentSpec(agent proto.AgentStatus, program, dir string) proto.PaneSpec {
+	label := ""
+	if agent.Detects {
+		label = agent.ID
+	}
+	return proto.PaneSpec{
+		Command: append([]string{"/bin/sh", "-c", resumeScript, "tend-agent", program}, agent.Args...),
+		Dir:     dir,
+		Agent:   label,
+	}
 }

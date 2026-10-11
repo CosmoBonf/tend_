@@ -36,6 +36,31 @@ func (p *Pty) Foreground() string {
 	return strings.TrimSpace(string(name))
 }
 
+// ForegroundArgv is the arguments of the program in charge of the terminal,
+// for a runtime whose name says nothing (node, python, a shell) — the agent
+// it runs is its script (internal/agent's WrappedAgentName). Nil when the
+// process cannot be read.
+func (p *Pty) ForegroundArgv() []string {
+	if p.f == nil {
+		return nil
+	}
+	pgrp, err := foregroundGroup(p.f)
+	if err != nil || pgrp <= 0 {
+		return nil
+	}
+	cmdline, err := os.ReadFile("/proc/" + strconv.Itoa(pgrp) + "/cmdline")
+	if err != nil {
+		return nil
+	}
+	var argv []string
+	for _, arg := range strings.Split(strings.TrimRight(string(cmdline), "\x00"), "\x00") {
+		if arg != "" {
+			argv = append(argv, arg)
+		}
+	}
+	return argv
+}
+
 // foregroundGroup asks the terminal which process group has it.
 //
 // The descriptor is borrowed through SyscallConn rather than taken with Fd().
@@ -158,4 +183,62 @@ func processGroup(pid int) int {
 		return 0
 	}
 	return pgrp
+}
+
+// ChildForeground is the process group in charge of the terminal when it is
+// not the pane's own process: a program its shell started — an agent typed
+// at the prompt. It is 0 when the pane's process has the terminal itself, or
+// when it cannot be told.
+func (p *Pty) ChildForeground() int {
+	if p.f == nil {
+		return 0
+	}
+	pgrp, err := foregroundGroup(p.f)
+	if err != nil || pgrp <= 0 || pgrp == p.pid {
+		return 0
+	}
+	return pgrp
+}
+
+// SignalGroup sends a signal to every process of a group.
+func SignalGroup(pgrp int, sig syscall.Signal) error {
+	if pgrp <= 0 {
+		return syscall.ESRCH
+	}
+	return syscall.Kill(-pgrp, sig)
+}
+
+// GroupMemory is the resident memory the processes of a group hold, in
+// bytes: what ending the group gives back. An agent's group holds the
+// helpers it started too — its MCP servers, a language server — and they go
+// with it.
+func GroupMemory(pgrp int) int64 {
+	if pgrp <= 0 {
+		return 0
+	}
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return 0
+	}
+	page := int64(os.Getpagesize())
+	var total int64
+	for _, e := range entries {
+		pid, err := strconv.Atoi(e.Name())
+		if err != nil || processGroup(pid) != pgrp {
+			continue
+		}
+		statm, err := os.ReadFile("/proc/" + e.Name() + "/statm")
+		if err != nil {
+			continue
+		}
+		// size resident shared ...: the second is the resident pages.
+		fields := strings.Fields(string(statm))
+		if len(fields) < 2 {
+			continue
+		}
+		if pages, err := strconv.ParseInt(fields[1], 10, 64); err == nil {
+			total += pages * page
+		}
+	}
+	return total
 }

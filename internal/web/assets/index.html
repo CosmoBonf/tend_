@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14161a">
+<title>tend</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icon.svg">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header>
+  <button id="back" class="hidden" aria-label="back">‹</button>
+  <h1 id="title">tend</h1>
+  <button id="signout" title="sign out of this phone">sign out</button>
+  <span id="conn" class="dot" title="connection"></span>
+</header>
+<main id="list"></main>
+<section id="agent" class="hidden">
+  <div id="where"></div>
+  <pre id="screen"></pre>
+  <div id="keys">
+    <button data-key="enter">⏎</button>
+    <button data-key="esc">esc</button>
+    <button data-key="1">1</button>
+    <button data-key="2">2</button>
+    <button data-key="3">3</button>
+    <button data-key="up">↑</button>
+    <button data-key="down">↓</button>
+    <button data-key="tab">tab</button>
+    <button id="sleepwake">sleep</button>
+  </div>
+  <form id="send">
+    <textarea id="message" rows="1" placeholder="Message the agent"></textarea>
+    <button type="submit">Send</button>
+  </form>
+</section>
+<script src="/app.js"></script>
+</body>
+</html>

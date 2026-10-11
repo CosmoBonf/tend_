@@ -149,3 +149,23 @@ func TestQoderIsFoundOnlyAsItsCLI(t *testing.T) {
 		}
 	}
 }
+
+// TestTheDeepSeekHarnessStartsAsItsTerminalAgent: dsh is in the catalog,
+// started with its tui profile, with the harness's npm package to install.
+// If it regresses, the manager lists no DeepSeek Harness, or starts the
+// bare launcher.
+func TestTheDeepSeekHarnessStartsAsItsTerminalAgent(t *testing.T) {
+	for _, d := range Catalog() {
+		if d.ID != "dsh" {
+			continue
+		}
+		if len(d.Args) != 2 || d.Args[0] != "--profile" || d.Args[1] != "tui" || d.Binaries[0] != "dsh" {
+			t.Errorf("dsh = %+v", d)
+		}
+		if len(d.Methods) == 0 || d.Methods[0].Command != "npm install -g @deepseek-ai/dsh" {
+			t.Errorf("methods = %+v", d.Methods)
+		}
+		return
+	}
+	t.Error("no dsh in the catalog")
+}

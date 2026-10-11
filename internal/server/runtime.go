@@ -56,8 +56,11 @@ type paneRuntime struct {
 	// mouse is the last reported state of the pane program's mouse reporting.
 	// Whether a click belongs to the pane or to the client turns on it, so a
 	// client holding a stale answer sends the wheel to the wrong place.
-	mouse   bool
-	running bool
+	mouse bool
+	// wheelKeys and appCursor are what the client was last told about the
+	// wheel, so a change is told.
+	wheelKeys, appCursor bool
+	running              bool
 	// closeOnExit closes the pane when its program ends, for a pane opened to
 	// run one thing — a user's command, the scrollback editor — whose frame
 	// would otherwise sit there saying "exited" until closed by hand. Set
@@ -68,6 +71,13 @@ type paneRuntime struct {
 	clipboard [][]byte
 	closing   bool
 	exitErr   string
+
+	// dormant is set while the pane's agent sleeps (dormant.go): a shell
+	// runs where it was, and this is how to bring it back. idleSince is
+	// when the agent last became idle, zero while it is not, which is what
+	// putting it to sleep by itself goes by.
+	dormant   *dormantAgent
+	idleSince time.Time
 
 	// parked is how the reader says it has stopped for a handoff, verdict is
 	// how it hears whether to carry on, and gone closes when the reader has
@@ -173,6 +183,12 @@ func (rt *paneRuntime) settleLocked() (eff agent.Effective, rule string, changed
 	if eff == rt.shown && rule == rt.shownRule {
 		return eff, rule, false
 	}
+	switch {
+	case eff.State != detect.StateIdle || eff.Agent == "":
+		rt.idleSince = time.Time{}
+	case rt.idleSince.IsZero() || rt.shown.State != detect.StateIdle:
+		rt.idleSince = time.Now()
+	}
 	rt.shown, rt.shownRule = eff, rule
 	return eff, rule, true
 }
@@ -219,6 +235,12 @@ func (rt *paneRuntime) poll(lastTitle string) observation {
 	// the mouse too, and nothing else tells a client about it.
 	if mouse := rt.screen.Modes().Mouse != vt.MouseOff; mouse != rt.mouse {
 		rt.mouse = mouse
+		obs.mouseChanged = true
+	}
+	// What the wheel does changes with the alternate screen too: a pager or
+	// a full-screen agent opening is when the wheel starts meaning arrows.
+	if keys, app := rt.screen.WheelKeys(), rt.screen.Modes().ApplicationCur; keys != rt.wheelKeys || app != rt.appCursor {
+		rt.wheelKeys, rt.appCursor = keys, app
 		obs.mouseChanged = true
 	}
 	if rt.dirty && rt.detector != nil {
@@ -327,6 +349,8 @@ func (rt *paneRuntime) status() PaneStatus {
 		MouseDrag:    modes.Mouse >= vt.MouseButtonEvent,
 		MouseMotion:  modes.Mouse >= vt.MouseAnyEvent,
 		MouseSGR:     modes.MouseEncoding == vt.MouseEncodingSGR || modes.MouseEncoding == vt.MouseEncodingSGRPixels,
+		WheelKeys:    rt.screen.WheelKeys(),
+		AppCursor:    modes.ApplicationCur,
 		Graphics:     rt.screen.KittyRevision(),
 		ID:           rt.id,
 		Title:        rt.title,
@@ -338,6 +362,9 @@ func (rt *paneRuntime) status() PaneStatus {
 		Running:      rt.running,
 		ExitErr:      rt.exitErr,
 		Pid:          rt.pty.Pid(),
+	}
+	if rt.dormant != nil {
+		st.Dormant = rt.dormant.Agent
 	}
 	return st
 }

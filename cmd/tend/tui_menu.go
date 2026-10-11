@@ -1,6 +1,8 @@
 package main
 
 import (
+	"strconv"
+
 	"github.com/auth-com-br/tend/internal/proto"
 	"github.com/auth-com-br/tend/internal/ui"
 )
@@ -81,7 +83,22 @@ func (t *tui) menuFor(x, y int) (ui.Menu, bool) {
 	cols, rows := t.cols, t.rows
 	panes := len(t.rects)
 	groups := t.hasGroupsLocked()
+	companies := len(t.snap.Companies)
 	agentAt := t.paneAgentsLocked()
+	asleep := map[uint64]bool{}
+	for _, p := range t.snap.Panes {
+		asleep[p.ID] = p.Dormant
+	}
+	canSleep := t.serverKnows(proto.MethodPaneSleep)
+	var sel *ui.Selection
+	if t.sel != nil {
+		s := *t.sel
+		sel = &s
+	}
+	programCopy := map[uint64]bool{}
+	for pane, text := range t.programCopy {
+		programCopy[pane] = text != ""
+	}
 	t.mu.Unlock()
 
 	if row, ok := ui.SidebarRowAt(frame, x, y, rows); ok {
@@ -94,9 +111,13 @@ func (t *tui) menuFor(x, y int) (ui.Menu, bool) {
 		case ui.SidebarSpace:
 			return ui.SpaceMenu(row.Workspace, groups, x, y), true
 		case ui.SidebarSpaceGroup:
-			return ui.GroupMenu(row.Group, row.Folded, tildeHome(t.groupDirLocked(row.Group)), x, y), true
+			return ui.GroupMenu(row.Group, row.Folded, tildeHome(t.groupDirLocked(row.Group)), companies > 0, x, y), true
 		case ui.SidebarAgent:
-			return ui.AgentMenu(row.Pane, row.Tab, row.Workspace, x, y), true
+			m := ui.AgentMenu(row.Pane, row.Tab, row.Workspace, x, y)
+			if canSleep {
+				m = ui.WithSleep(m, asleep[row.Pane])
+			}
+			return m, true
 		}
 		return ui.Menu{}, false
 	}
@@ -106,7 +127,16 @@ func (t *tui) menuFor(x, y int) (ui.Menu, bool) {
 	if pane := t.paneAt(x, y); pane != 0 {
 		// The last pane in a tab has no "close pane": closing it would leave
 		// an empty tab, and "close tab" is the honest name for that.
-		return ui.PaneMenu(pane, x, y, panes > 1, agentAt[pane] != ""), true
+		// The selection is still there when the right button goes down —
+		// only a left press clears it — so the menu can offer to copy it.
+		// An agent that takes the mouse selects for itself and copies what
+		// it selected; that copy stands for its selection.
+		selected := (sel != nil && sel.Pane == pane && !sel.Empty()) || programCopy[pane]
+		m := ui.PaneMenu(pane, x, y, panes > 1, agentAt[pane] != "", selected)
+		if agentAt[pane] != "" && canSleep {
+			m = ui.WithSleep(m, asleep[pane])
+		}
+		return m, true
 	}
 	return ui.Menu{}, false
 }
@@ -135,6 +165,26 @@ func (t *tui) clickMenu(x, y int) (bool, error) {
 	}
 	t.closeMenu()
 	return true, t.runMenu(*menu, item)
+}
+
+// scrollMenu turns the wheel over a long menu: the list moves, the cursor
+// with it, so the item under the pointer is the one a click runs. Reports
+// whether a menu with more items than it shows was under the point.
+func (t *tui) scrollMenu(x, y, delta int) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	m := t.menu
+	if m == nil {
+		return false
+	}
+	if _, _, inside := ui.MenuItemAt(*m, t.cols, t.rows, x, y); !inside {
+		return false
+	}
+	m.Selected = -1
+	m.Scroll = m.Top(t.cols, t.rows) + delta
+	m.Scroll = m.Top(t.cols, t.rows)
+	t.dirty = true
+	return true
 }
 
 // menuKeys drives the menu from the keyboard, so it is not a mouse-only
@@ -188,6 +238,7 @@ func (t *tui) moveMenu(delta int) {
 			}
 		}
 		t.menu.Selected = (at + delta + n) % n
+		t.menu.Scroll = t.menu.Top(t.cols, t.rows)
 		t.dirty = true
 	}
 	t.mu.Unlock()
@@ -254,12 +305,44 @@ func (t *tui) runMenu(m ui.Menu, item ui.MenuItem) error {
 	case ui.MenuPickGroup:
 		return t.moveSpaceToGroup(m.Workspace, item.Arg)
 
+	case ui.MenuMoveToCompany:
+		// From the company being looked at; from every one when none is.
+		t.mu.Lock()
+		from, chosen := t.companyLocked()
+		var choices []ui.CompanyChoice
+		for _, c := range t.snap.Companies {
+			if !chosen || c.ID != from.ID {
+				choices = append(choices, ui.CompanyChoice{ID: strconv.FormatUint(c.ID, 10), Name: c.Name})
+			}
+		}
+		t.mu.Unlock()
+		if len(choices) == 0 {
+			t.setMessage("no other company to move it to: make one with the mark beside \"spaces\"", false)
+			return nil
+		}
+		t.openMenu(ui.CompanyPickMenu(m.Group, from.Name, choices, m.X, m.Y))
+		return nil
+
+	case ui.MenuPickCompany:
+		return t.moveGroupToCompany(m.Group, item.Arg, item.Label)
+
 	case ui.MenuContinueIn:
 		t.openMenu(ui.ContinueMenu(m.Pane, "", continueAgents(), m.X, m.Y))
 		return nil
 
 	case ui.MenuContinueWith:
 		go t.continueIn(m.Pane, m.Conversation, item.Arg)
+		return nil
+
+	case ui.MenuCopy:
+		go t.copySelection(m.Pane)
+		return nil
+
+	case ui.MenuPaste:
+		if m.Pane != 0 {
+			t.focusPane(m.Pane)
+		}
+		go t.pasteInto(m.Pane)
 		return nil
 
 	case ui.MenuFiles:
@@ -375,6 +458,46 @@ func (t *tui) runMenu(m ui.Menu, item ui.MenuItem) error {
 		return t.runTool(item.Arg)
 	case ui.MenuMCPDo:
 		return t.mcpMenuAction(item.Arg)
+	case ui.MenuSleep:
+		go t.sleepAgent(m.Pane)
+		return nil
+	case ui.MenuSleepPick:
+		if !t.serverKnows(proto.MethodPaneSleep) {
+			t.setMessage("this server is older than sleeping agents; "+handoffCommand(t.session)+" moves it to this build", true)
+			return nil
+		}
+		t.mu.Lock()
+		choices := t.sleepChoicesLocked()
+		t.mu.Unlock()
+		t.openMenu(ui.SleepMenu(choices, m.X, m.Y))
+		return nil
+	case ui.MenuSleepOne:
+		if pane, err := strconv.ParseUint(item.Arg, 10, 64); err == nil {
+			go t.sleepAgent(pane)
+		}
+		return nil
+	case ui.MenuSleepIdle:
+		t.mu.Lock()
+		var idle []uint64
+		for _, c := range t.sleepChoicesLocked() {
+			if c.Idle {
+				idle = append(idle, c.Pane)
+			}
+		}
+		t.mu.Unlock()
+		go t.sleepAgents(idle)
+		return nil
+	case ui.MenuWake:
+		go func() {
+			if err := t.client.WakePane(m.Pane); err != nil {
+				t.setMessage(refusalText(err), true)
+			}
+		}()
+		return nil
+	case ui.MenuPermissions:
+		return t.openPermManager()
+	case ui.MenuPermDo:
+		return t.permMenuAction(item.Arg)
 	case ui.MenuDetach:
 		t.detach = true
 		return nil
@@ -390,6 +513,31 @@ func (t *tui) moveSpaceToGroup(workspace uint64, group string) error {
 		}
 		return err
 	}
+	return t.refresh()
+}
+
+// moveGroupToCompany moves a group and its spaces to another company: from
+// the one being looked at, or from every one when none is. Looking at the
+// company it left, the group is gone from the list, which says it moved.
+func (t *tui) moveGroupToCompany(group, to, name string) error {
+	if !t.client.Supports(proto.MethodGroupMoveCompany) {
+		t.setMessage("moving a group needs a newer server: run tend handoff", true)
+		return nil
+	}
+	id, err := strconv.ParseUint(to, 10, 64)
+	if err != nil {
+		return err
+	}
+	t.mu.Lock()
+	from, _ := t.companyLocked()
+	t.mu.Unlock()
+	if err := t.client.MoveGroupToCompany(group, from.ID, id); err != nil {
+		if t.reportStaleServer(err) {
+			return nil
+		}
+		return err
+	}
+	t.setMessage("moved "+group+" to "+name, false)
 	return t.refresh()
 }
 

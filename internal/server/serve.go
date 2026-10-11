@@ -47,6 +47,7 @@ var Methods = []string{
 	proto.MethodPaneSubscribe,
 	proto.MethodPaneScreen,
 	proto.MethodPaneText,
+	proto.MethodPanePaste,
 	proto.MethodPaneAdjust,
 	proto.MethodTabLayout,
 	proto.MethodServerShutdown,
@@ -55,6 +56,8 @@ var Methods = []string{
 	proto.MethodPaneCopySearch,
 	proto.MethodServerReloadConfig,
 	proto.MethodPaneFocus,
+	proto.MethodPaneSleep,
+	proto.MethodPaneWake,
 	proto.MethodPaneRename,
 	proto.MethodPaneEditScrollback,
 	proto.MethodPaneGraphics,
@@ -96,12 +99,21 @@ var Methods = []string{
 	proto.MethodGroupRename,
 	proto.MethodGroupDelete,
 	proto.MethodGroupSetDir,
+	proto.MethodGroupMoveCompany,
 	proto.MethodDirList,
 	proto.MethodMCPList,
 	proto.MethodMCPTest,
 	proto.MethodMCPSetEnabled,
 	proto.MethodMCPAdd,
 	proto.MethodMCPRemove,
+	proto.MethodPermList,
+	proto.MethodPermAdd,
+	proto.MethodPermRemove,
+	proto.MethodPermSetDecision,
+	proto.MethodPermMove,
+	proto.MethodPermSetMode,
+	proto.MethodPermEditors,
+	proto.MethodPermOpen,
 }
 
 // Serve accepts connections until the listener is closed.
@@ -369,7 +381,8 @@ func (c *clientConn) serveRequests() {
 	}
 }
 
-// slowRequest reports whether a request is one of the MCP manager's, which
+// slowRequest reports whether a request is one of the MCP manager's or the
+// permissions manager's, which
 // do I/O that can take seconds and touch nothing a later request depends
 // on being done first.
 func slowRequest(payload []byte) bool {
@@ -379,7 +392,9 @@ func slowRequest(payload []byte) bool {
 	if json.Unmarshal(payload, &req) != nil {
 		return false
 	}
-	return strings.HasPrefix(req.Method, "mcp.")
+	// The permissions manager's too: a Codex rule written is handed to
+	// `codex execpolicy check`, a process of its own.
+	return strings.HasPrefix(req.Method, "mcp.") || strings.HasPrefix(req.Method, "perm.")
 }
 
 func (c *clientConn) handleRequest(payload []byte) error {
@@ -541,6 +556,27 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 		}
 		return c.srv.MCPRemove(p), nil
 
+	case proto.MethodPermList:
+		var p proto.PermListParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return c.srv.PermList(p), nil
+	case proto.MethodPermAdd, proto.MethodPermRemove, proto.MethodPermSetDecision, proto.MethodPermMove, proto.MethodPermSetMode:
+		var p proto.PermWriteParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return nil, c.srv.PermWrite(req.Method, p)
+	case proto.MethodPermEditors:
+		return c.srv.PermEditors(), nil
+	case proto.MethodPermOpen:
+		var p proto.PermOpenParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return c.srv.PermOpen(p)
+
 	case proto.MethodDirList:
 		var p proto.DirListParams
 		if err := decodeParams(req.Params, &p); err != nil {
@@ -548,7 +584,7 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 		}
 		return listDirs(p.Path)
 
-	case proto.MethodGroupRename, proto.MethodGroupDelete, proto.MethodGroupSetDir:
+	case proto.MethodGroupRename, proto.MethodGroupDelete, proto.MethodGroupSetDir, proto.MethodGroupMoveCompany:
 		var p proto.GroupParams
 		if err := decodeParams(req.Params, &p); err != nil {
 			return nil, err
@@ -642,6 +678,13 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 			return nil, err
 		}
 		return c.srv.PaneText(session.PaneID(p.Pane), p)
+
+	case proto.MethodPanePaste:
+		var p proto.PanePasteParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return nil, c.srv.SendText(session.PaneID(p.Pane), p.Text)
 
 	case proto.MethodPaneAdjust:
 		var p proto.PaneAdjustParams
@@ -829,6 +872,23 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 			return nil, err
 		}
 		return nil, c.srv.RenamePane(session.PaneID(p.Pane), p.Name)
+
+	case proto.MethodPaneSleep:
+		var p proto.PaneScreenParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		res, err := c.srv.SleepAgent(session.PaneID(p.Pane))
+		if err != nil {
+			return nil, err
+		}
+		return proto.PaneSleepResult{Agent: res.Agent, Freed: res.Freed}, nil
+	case proto.MethodPaneWake:
+		var p proto.PaneScreenParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return nil, c.srv.Wake(session.PaneID(p.Pane))
 
 	case proto.MethodPaneFocus:
 		var p proto.PaneFocusParams
@@ -1089,6 +1149,11 @@ func (s *Server) snapshot() proto.SessionSnapshot {
 			continue
 		}
 		st := rt.status()
+		if st.Dormant != "" {
+			// The detector sees the shell; the pane is the agent asleep.
+			snap.Panes[i].Dormant = true
+			snap.Panes[i].Agent = st.Dormant
+		}
 		snap.Panes[i].Running = st.Running
 		snap.Panes[i].Pid = st.Pid
 		snap.Panes[i].ExitErr = st.ExitErr
@@ -1097,6 +1162,8 @@ func (s *Server) snapshot() proto.SessionSnapshot {
 		snap.Panes[i].MouseDrag = st.MouseDrag
 		snap.Panes[i].MouseMotion = st.MouseMotion
 		snap.Panes[i].MouseSGR = st.MouseSGR
+		snap.Panes[i].WheelKeys = st.WheelKeys
+		snap.Panes[i].AppCursor = st.AppCursor
 		snap.Panes[i].Graphics = st.Graphics
 		snap.Panes[i].Display = st.Presentation.DisplayAgent
 		snap.Panes[i].StateLabels = st.Presentation.StateLabels

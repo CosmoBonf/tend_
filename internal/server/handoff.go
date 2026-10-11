@@ -93,6 +93,17 @@ type HandoffPane struct {
 	// CloseOnExit is a pane opened to run one command, which still closes
 	// when it ends on the other side of a handoff.
 	CloseOnExit bool `json:"close_on_exit,omitempty"`
+	// Dormant is the agent asleep in the pane (dormant.go), which sleeps on
+	// in the new server: its pane is a shell like any other, and this is
+	// what wakes it. A build without it reads the pane as the shell it is.
+	Dormant *HandoffDormant `json:"dormant,omitempty"`
+}
+
+// HandoffDormant is a sleeping agent, as it crosses a handoff.
+type HandoffDormant struct {
+	Agent   string                  `json:"agent"`
+	Argv    []string                `json:"argv"`
+	Session *agent.PersistedSession `json:"session,omitempty"`
 }
 
 // Handoff is one attempt, from the moment the readers stop.
@@ -296,6 +307,9 @@ func (rt *paneRuntime) handoffPane() HandoffPane {
 	if p, ok := rt.arbiter.Session(); ok {
 		hp.AgentSession = &p
 	}
+	if d := rt.dormant; d != nil {
+		hp.Dormant = &HandoffDormant{Agent: d.Agent, Argv: d.Argv, Session: d.Session}
+	}
 	return hp
 }
 
@@ -371,6 +385,9 @@ func NewFromHandoff(cfg Config, m HandoffManifest, files []*os.File, ready func(
 			rt.arbiter.RestoreSession(*p.AgentSession)
 		}
 		rt.closeOnExit = p.CloseOnExit
+		if d := p.Dormant; d != nil {
+			rt.dormant = &dormantAgent{Agent: d.Agent, Argv: d.Argv, Session: d.Session}
+		}
 		rt.write(p.Resume)
 		s.runtimes[id] = rt
 		s.titles[id] = ""

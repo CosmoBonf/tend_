@@ -18,6 +18,9 @@ type transientPane struct {
 	pane         uint64
 	previous     uint64
 	previousZoom bool
+	// then runs once the pane has gone: the permissions manager is put back
+	// up over an agent's file closed in the editor, read again.
+	then func()
 }
 
 // runCustomCommand runs the user's command at index i.
@@ -78,6 +81,10 @@ func (t *tui) returnFromTransientLocked(inLayout func(uint64) bool) bool {
 		return false
 	}
 	t.transient = nil
+	if tr.then != nil {
+		// Not under the caller's lock: it takes it.
+		go tr.then()
+	}
 	if tr.previous == 0 || !inLayout(tr.previous) {
 		return false
 	}

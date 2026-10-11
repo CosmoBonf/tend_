@@ -78,9 +78,9 @@ func (a *jsonAgent) Supports(t Transport) bool {
 }
 
 func (a *jsonAgent) opts(path string) writeOpts {
-	o := writeOpts{backups: a.backups, backupName: a.id + "-" + filepath.Base(path), mode: 0o600}
+	o := writeOpts{Backups: a.backups, BackupName: a.id + "-" + filepath.Base(path), Mode: 0o600}
 	if a.lockDir != nil {
-		o.lockDir = a.lockDir(path)
+		o.LockDir = a.lockDir(path)
 	}
 	return o
 }

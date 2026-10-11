@@ -28,9 +28,22 @@ func (s *Server) AgentsCatalog() proto.AgentsCatalogResult {
 			InstallKind: a.Install.Kind, InstallCommand: a.Install.Command,
 			InstallSource: a.Install.Source, Missing: a.Missing,
 			Kind: a.Kind, Running: a.Running, Next: a.Next,
+			Args: a.Args, Detects: s.knowsAgent(a.ID),
 		})
 	}
 	return out
+}
+
+// knowsAgent reports whether there are detection rules for an agent.
+func (s *Server) knowsAgent(id string) bool {
+	s.mu.Lock()
+	catalog := s.catalog
+	s.mu.Unlock()
+	if catalog == nil {
+		return false
+	}
+	_, ok := catalog.Lookup(id)
+	return ok
 }
 
 // claude is the reader of Claude Code's conversations on this machine, the

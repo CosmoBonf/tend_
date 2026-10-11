@@ -44,6 +44,10 @@ const (
 	// taking the space out of the group it is in.
 	MenuMoveToGroup = "menu-move-to-group"
 	MenuPickGroup   = "menu-pick-group"
+	// MenuMoveToCompany lists the companies a group can be moved to, and
+	// MenuPickCompany is one of them, its id in Arg.
+	MenuMoveToCompany = "menu-move-to-company"
+	MenuPickCompany   = "menu-pick-company"
 	// MenuGroupDir asks for the folder a group's new spaces start in, and
 	// MenuGroupDirClear forgets it.
 	MenuGroupDir      = "menu-group-dir"
@@ -56,6 +60,11 @@ const (
 	// MenuContinueWith hands it to the one in Arg (docs/MEMORY.md).
 	MenuContinueIn   = "continue-in"
 	MenuContinueWith = "continue-with"
+	// MenuCopy and MenuPaste are the pane menu's clipboard: copy what is
+	// selected in the pane, paste the clipboard into it. herdr's pane menu
+	// has neither (PORTING.md, "Different from herdr on purpose").
+	MenuCopy  = "menu-copy"
+	MenuPaste = "menu-paste"
 	// MenuFiles opens or closes the file explorer panel, prefix+f.
 	MenuFiles    = "menu-files"
 	MenuMoveBack = "menu-move-back"
@@ -81,7 +90,50 @@ const (
 	// MenuMCPDo is an action on the MCP manager's row, from its own menu;
 	// Arg is the action and the agent it is for, "action:agent".
 	MenuMCPDo = "menu-mcp-do"
+	// MenuPermissions opens the permissions manager, and MenuPermDo is an
+	// action of its own menus; Arg says which.
+	MenuPermissions = "menu-permissions"
+	MenuPermDo      = "menu-perm-do"
+	// MenuSleep puts the pane's agent to sleep — its process ended, its
+	// conversation kept — and MenuWake brings it back.
+	MenuSleep = "menu-sleep"
+	MenuWake  = "menu-wake"
+	// MenuSleepPick lists the agents that are awake, to put one to sleep
+	// (MenuSleepOne, Arg its pane) or every idle one (MenuSleepIdle).
+	MenuSleepPick = "menu-sleep-pick"
+	MenuSleepOne  = "menu-sleep-one"
+	MenuSleepIdle = "menu-sleep-idle"
 )
+
+// SleepChoice is an awake agent as the sleep menu offers it.
+type SleepChoice struct {
+	Pane  uint64
+	Label string
+	Idle  bool
+}
+
+// SleepMenu lists the agents that are awake, every idle one first as one
+// item, then each by itself. One working is offered too, marked: putting
+// it to sleep ends what it is doing, which is the person's to decide.
+func SleepMenu(choices []SleepChoice, x, y int) Menu {
+	var items []MenuItem
+	idle := 0
+	for _, c := range choices {
+		if c.Idle {
+			idle++
+		}
+	}
+	if idle > 1 {
+		items = append(items, MenuItem{Label: "every idle agent (" + itoa(uint64(idle)) + ")", Action: MenuSleepIdle})
+	}
+	for _, c := range choices {
+		items = append(items, MenuItem{Label: c.Label, Action: MenuSleepOne, Arg: itoa(c.Pane)})
+	}
+	if len(items) == 0 {
+		items = append(items, MenuItem{Label: "no agent is awake"})
+	}
+	return Menu{Title: "sleep which agent?", Items: items, X: x, Y: y}
+}
 
 // ToolChoice is a tool as the tools menu offers it.
 type ToolChoice struct {
@@ -134,6 +186,8 @@ func GlobalMenu(stale, ready, notes bool, x, y int) Menu {
 		// tend's own, above herdr's: where to find everything else.
 		{Label: "all tools...", Action: MenuTools},
 		{Label: "MCP servers", Action: MenuMCP},
+		{Label: "agent permissions", Action: MenuPermissions},
+		{Label: "sleep an agent...", Action: MenuSleepPick},
 		{Label: "settings", Action: MenuSettings},
 		{Label: "keybinds", Action: MenuKeybinds},
 		{Label: "reload config", Action: MenuReload},
@@ -167,6 +221,10 @@ type Menu struct {
 	// Selected is the keyboard cursor. The mouse does not use it: clicking an
 	// item runs that item, not whatever the cursor was on.
 	Selected int
+	// Scroll is the first item shown when there are more than the screen
+	// holds — a list of every agent of every space — kept by the client as
+	// the cursor or the wheel moves it (Top says where it lands).
+	Scroll int
 
 	Pane      uint64
 	Tab       uint64
@@ -201,6 +259,26 @@ func (m Menu) Rect(cols, rows int) Rect {
 	return r
 }
 
+// Top is the first item a menu shows on a screen of rows: its Scroll, moved
+// as little as keeps the cursor in view, and no further than leaves the
+// last item at the bottom. A menu that fits shows from the first.
+func (m Menu) Top(cols, rows int) int {
+	visible := m.Rect(cols, rows).Rows - 2
+	if visible <= 0 || len(m.Items) <= visible {
+		return 0
+	}
+	top := m.Scroll
+	if m.Selected >= 0 {
+		if m.Selected < top {
+			top = m.Selected
+		}
+		if m.Selected >= top+visible {
+			top = m.Selected - visible + 1
+		}
+	}
+	return min(max(top, 0), len(m.Items)-visible)
+}
+
 // MenuItemAt returns the item under a point, and whether the point is inside
 // the menu at all.
 //
@@ -213,10 +291,10 @@ func MenuItemAt(m Menu, cols, rows, x, y int) (item MenuItem, onItem, inside boo
 		return MenuItem{}, false, false
 	}
 	i := y - r.Y - 1
-	if i < 0 || i >= len(m.Items) {
+	if i < 0 || i >= r.Rows-2 || m.Top(cols, rows)+i >= len(m.Items) {
 		return MenuItem{}, false, true
 	}
-	return m.Items[i], true, true
+	return m.Items[m.Top(cols, rows)+i], true, true
 }
 
 // drawMenu paints the popup over whatever is behind it.
@@ -235,8 +313,18 @@ func drawMenu(dst *vt.Grid, m Menu, theme Theme) {
 	}
 
 	limit := r.X + r.Cols - 1
-	for i, item := range m.Items {
-		y := r.Y + 1 + i
+	top := m.Top(dst.Cols(), dst.Rows())
+	// A list longer than the screen says so on its border, at the end that
+	// has more: the items past it are a turn of the wheel away.
+	if top > 0 {
+		writeString(dst, r.X+r.Cols-3, r.Y, "▲", theme.MenuTitle, r.X+r.Cols)
+	}
+	if top+r.Rows-2 < len(m.Items) {
+		writeString(dst, r.X+r.Cols-3, r.Y+r.Rows-1, "▼", theme.MenuTitle, r.X+r.Cols)
+	}
+	for i := top; i < len(m.Items); i++ {
+		item := m.Items[i]
+		y := r.Y + 1 + i - top
 		if y >= r.Y+r.Rows-1 {
 			break
 		}
@@ -255,15 +343,23 @@ func drawMenu(dst *vt.Grid, m Menu, theme Theme) {
 // PaneMenu is what a right-click on a pane offers.
 //
 // A pane running an agent also offers to hand its task to another agent.
-func PaneMenu(pane uint64, x, y int, closable, agent bool) Menu {
-	items := []MenuItem{
+// Copy is offered when text is selected in the pane, and paste always: it
+// needs the clipboard, not a selection. Both come first, where a hand that
+// right-clicked a selection looks.
+func PaneMenu(pane uint64, x, y int, closable, agent, selected bool) Menu {
+	var items []MenuItem
+	if selected {
+		items = append(items, MenuItem{Label: "copy", Action: MenuCopy})
+	}
+	items = append(items, []MenuItem{
+		{Label: "paste", Action: MenuPaste},
 		{Label: "split right", Action: MenuSplitRight},
 		{Label: "split down", Action: MenuSplitDown},
 		{Label: "zoom", Action: MenuZoom},
 		{Label: "rename pane", Action: MenuRenamePane},
 		{Label: "rename tab", Action: MenuRename},
 		{Label: "files panel", Action: MenuFiles},
-	}
+	}...)
 	if agent {
 		items = append(items, MenuItem{Label: "continue in...", Action: MenuContinueIn})
 	}
@@ -271,6 +367,26 @@ func PaneMenu(pane uint64, x, y int, closable, agent bool) Menu {
 		items = append(items, MenuItem{Label: "close pane", Action: MenuClose})
 	}
 	return Menu{Title: "pane", Items: items, X: x, Y: y, Pane: pane}
+}
+
+// WithSleep adds to a pane's or an agent's menu what can be done about its
+// agent's process: put it to sleep to give its memory back, or wake it.
+// The item goes before "close pane", which stays last.
+func WithSleep(m Menu, asleep bool) Menu {
+	item := MenuItem{Label: "sleep (free its memory)", Action: MenuSleep}
+	if asleep {
+		item = MenuItem{Label: "wake the agent", Action: MenuWake}
+	}
+	at := len(m.Items)
+	for i, it := range m.Items {
+		if it.Action == MenuClose {
+			at = i
+		}
+	}
+	items := append([]MenuItem(nil), m.Items[:at]...)
+	items = append(items, item)
+	m.Items = append(items, m.Items[at:]...)
+	return m
 }
 
 // TabMenu is what a right-click on the tab bar offers.
@@ -333,6 +449,24 @@ func GroupPickMenu(workspace uint64, current string, groups []string, x, y int) 
 	return Menu{Title: "move to group", Items: items, X: x, Y: y, Workspace: workspace}
 }
 
+// CompanyPickMenu lists the companies a group can be moved to: every one
+// but the one it is being moved from. from names that one in the title,
+// or is empty when the group leaves every company it is in.
+func CompanyPickMenu(group, from string, companies []CompanyChoice, x, y int) Menu {
+	var items []MenuItem
+	for _, c := range companies {
+		items = append(items, MenuItem{Label: c.Name, Action: MenuPickCompany, Arg: c.ID})
+	}
+	title := "move to company"
+	if from != "" {
+		title = "move from " + from + " to"
+	}
+	return Menu{Title: title, Items: items, X: x, Y: y, Group: group}
+}
+
+// CompanyChoice is a company a menu offers, its id as text for MenuItem.Arg.
+type CompanyChoice struct{ ID, Name string }
+
 // GroupMenu is what a right-click on a group heading offers.
 //
 // It acts on the group as a whole, which is the set of spaces naming it: there
@@ -341,7 +475,9 @@ func GroupPickMenu(workspace uint64, current string, groups []string, x, y int) 
 // folder is the one the group's new spaces start in, shown as it is written
 // on the status line, or empty when none is set: the item that sets it says
 // which it is now, so finding out does not mean opening the prompt.
-func GroupMenu(group string, folded bool, folder string, x, y int) Menu {
+//
+// companies says there are companies to move it to.
+func GroupMenu(group string, folded bool, folder string, companies bool, x, y int) Menu {
 	fold := "fold"
 	if folded {
 		fold = "unfold"
@@ -357,6 +493,9 @@ func GroupMenu(group string, folded bool, folder string, x, y int) Menu {
 		items = append(items,
 			MenuItem{Label: "folder: " + folder, Action: MenuGroupDir},
 			MenuItem{Label: "clear folder", Action: MenuGroupDirClear})
+	}
+	if companies {
+		items = append(items, MenuItem{Label: "move to company...", Action: MenuMoveToCompany})
 	}
 	items = append(items,
 		MenuItem{Label: "rename group", Action: MenuRename},

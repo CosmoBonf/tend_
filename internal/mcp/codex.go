@@ -37,7 +37,7 @@ func (*codexAgent) Path() (string, error) {
 }
 
 func (c *codexAgent) opts(path string) writeOpts {
-	return writeOpts{backups: c.backups, backupName: "codex-" + filepath.Base(path), mode: 0o600}
+	return writeOpts{Backups: c.backups, BackupName: "codex-" + filepath.Base(path), Mode: 0o600}
 }
 
 // servers is the decoded server tables, by name.

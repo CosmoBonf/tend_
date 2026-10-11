@@ -38,9 +38,11 @@ func (s *Server) ReloadFromFile() proto.ReloadResult {
 		return result
 	}
 	interval, _ := cfg.DetectInterval()
+	sleepAfter, _ := cfg.SleepAfter()
 	result.Changed = s.Reload(Reloadable{
 		DetectInterval: interval,
 		Scrollback:     cfg.Scrollback(),
+		Sleep:          &SleepSettings{Restored: cfg.SleepRestored(), After: sleepAfter},
 	})
 	if s.tabBarDiffers(cfg.UI.TabBarRight, cfg.UI.TabBarSeparator) {
 		// Reconfigured only when it changed: doing it anyway would restart
@@ -56,6 +58,15 @@ type Reloadable struct {
 	DetectInterval time.Duration
 	Scrollback     int
 	DefaultSize    pty.Size
+	// Sleep is the sleeping agents' settings; nil leaves them. A pointer,
+	// since "never" is a zero that has to be told from "not said".
+	Sleep *SleepSettings
+}
+
+// SleepSettings are [agents]' sleep_restored and sleep_after.
+type SleepSettings struct {
+	Restored bool
+	After    time.Duration
 }
 
 // Reload applies settings to a running server and says what changed.
@@ -74,6 +85,16 @@ func (s *Server) Reload(next Reloadable) []string {
 	if next.DefaultSize.Valid() && next.DefaultSize != s.cfg.DefaultSize {
 		s.cfg.DefaultSize = next.DefaultSize
 		changed = append(changed, "default pane size")
+	}
+	if next.Sleep != nil {
+		if next.Sleep.Restored != s.cfg.SleepRestored {
+			s.cfg.SleepRestored = next.Sleep.Restored
+			changed = append(changed, "agents asleep after a restart")
+		}
+		if next.Sleep.After != s.cfg.SleepAfter {
+			s.cfg.SleepAfter = next.Sleep.After
+			changed = append(changed, "agents' sleep after idling")
+		}
 	}
 	interval := s.cfg.DetectInterval
 	s.mu.Unlock()

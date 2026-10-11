@@ -184,3 +184,49 @@ func TestHandoffWithoutAReplacementIsRefused(t *testing.T) {
 		t.Errorf("err = %v, want ErrHandoffUnavailable", err)
 	}
 }
+
+// TestHandoffKeepsASleepingAgentAsleep: a dormant pane is a shell like any
+// other and crosses as one; what wakes its agent crosses with it. If it
+// regresses, `tend handoff` turns every sleeping agent into a plain shell
+// that focusing no longer wakes.
+func TestHandoffKeepsASleepingAgentAsleep(t *testing.T) {
+	old := newServer(t)
+	ws, _ := old.NewWorkspace("main")
+	_, pane, err := old.NewTab(ws, "t", PaneSpec{Command: []string{"/bin/sh"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	old.mu.Lock()
+	rt := old.runtimes[pane]
+	old.mu.Unlock()
+	conversation := agent.PersistedSession{Source: "tend:claude", Agent: "claude", Session: agent.SessionRef{ID: "c-5"}}
+	rt.mu.Lock()
+	rt.dormant = &dormantAgent{Agent: "claude", Argv: []string{"claude", "--resume", "c-5"}, Session: &conversation}
+	rt.mu.Unlock()
+
+	h, err := old.BeginHandoff()
+	if err != nil {
+		t.Fatalf("BeginHandoff: %v", err)
+	}
+	files := h.Files
+	h.Files = nil
+	next, err := NewFromHandoff(handoffConfig(), h.Manifest, files, func() error { return nil })
+	if err != nil {
+		t.Fatalf("NewFromHandoff: %v", err)
+	}
+	t.Cleanup(func() { _ = next.Close() })
+	if err := old.CommitHandoff(h); err != nil {
+		t.Fatalf("CommitHandoff: %v", err)
+	}
+	for _, st := range next.Statuses() {
+		if st.ID == pane && st.Dormant != "claude" {
+			t.Fatalf("after the handoff the pane is %+v, want claude asleep", st)
+		}
+	}
+	next.mu.Lock()
+	d := next.runtimes[pane].dormant
+	next.mu.Unlock()
+	if d == nil || strings.Join(d.Argv, " ") != "claude --resume c-5" || d.Session == nil || d.Session.Session.ID != "c-5" {
+		t.Fatalf("what wakes it did not cross: %+v", d)
+	}
+}

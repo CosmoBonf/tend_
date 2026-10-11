@@ -393,6 +393,43 @@ func (c *Client) MCPRemove(name string, agents []string) (proto.MCPWriteResult, 
 	return out, c.Call(proto.MethodMCPRemove, proto.MCPRemoveParams{Name: name, Agents: agents}, &out)
 }
 
+// SleepPane ends a pane's agent and leaves it asleep, to be woken in its
+// conversation.
+func (c *Client) SleepPane(pane uint64) (proto.PaneSleepResult, error) {
+	var out proto.PaneSleepResult
+	return out, c.Call(proto.MethodPaneSleep, proto.PaneScreenParams{Pane: pane}, &out)
+}
+
+// WakePane wakes a pane's sleeping agent.
+func (c *Client) WakePane(pane uint64) error {
+	return c.Call(proto.MethodPaneWake, proto.PaneScreenParams{Pane: pane}, nil)
+}
+
+// PermList is every agent's permissions in the project of a pane, or of a
+// folder on the server's machine.
+func (c *Client) PermList(pane uint64, dir string) (proto.PermListResult, error) {
+	var out proto.PermListResult
+	return out, c.Call(proto.MethodPermList, proto.PermListParams{Pane: pane, Dir: dir}, &out)
+}
+
+// PermWrite is one of the permissions manager's writes: method is
+// perm.add, perm.remove, perm.set_decision, perm.move or perm.set_mode.
+func (c *Client) PermWrite(method string, p proto.PermWriteParams) error {
+	return c.Call(method, p, nil)
+}
+
+// PermEditors is the editors on the server's machine.
+func (c *Client) PermEditors() (proto.PermEditorsResult, error) {
+	var out proto.PermEditorsResult
+	return out, c.Call(proto.MethodPermEditors, nil, &out)
+}
+
+// PermOpen opens one of the agents' files in an editor.
+func (c *Client) PermOpen(p proto.PermOpenParams) (proto.PermOpenResult, error) {
+	var out proto.PermOpenResult
+	return out, c.Call(proto.MethodPermOpen, p, &out)
+}
+
 // ListDirs lists the folders in a folder on the server's machine.
 func (c *Client) ListDirs(path string) (proto.DirListResult, error) {
 	var out proto.DirListResult
@@ -516,6 +553,17 @@ func (c *Client) PaneText(p proto.PaneTextParams) (string, error) {
 	var out proto.PaneTextResult
 	err := c.Call(proto.MethodPaneText, p, &out)
 	return out.Text, err
+}
+
+// MoveGroupToCompany moves a group and its spaces from one company to
+// another; from zero is every company it is in.
+func (c *Client) MoveGroupToCompany(group string, from, to uint64) error {
+	return c.Call(proto.MethodGroupMoveCompany, proto.GroupParams{Group: group, From: from, To: to}, nil)
+}
+
+// PastePane writes text to a pane as a paste.
+func (c *Client) PastePane(pane uint64, text string) error {
+	return c.Call(proto.MethodPanePaste, proto.PanePasteParams{Pane: pane, Text: text}, nil)
 }
 
 func (c *Client) AdjustSplit(pane uint64, side string, cells, cols, rows int) error {

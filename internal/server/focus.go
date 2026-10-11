@@ -63,6 +63,8 @@ func (s *Server) FocusPane(gained, lost session.PaneID) {
 	if paneChanged {
 		s.publish(Event{Kind: EventPaneFocused, Pane: gained, Tab: tab, Workspace: workspace})
 	}
+	// A sleeping agent wakes when somebody goes to it (dormant.go).
+	s.wakeOnFocus(gained)
 }
 
 // placeOf is the tab and space a pane is in.

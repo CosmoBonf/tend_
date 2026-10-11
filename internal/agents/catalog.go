@@ -34,6 +34,16 @@ func Catalog() []Definition {
 			Methods:  methods["agy"],
 		},
 		{
+			// The harness's terminal agent is its tui profile, a plugin
+			// (deepseek-harness-tui) set up once by hand; tend starts it
+			// with its profile and reads its screens as dsh.
+			ID: "dsh", Name: "DeepSeek Harness", Description: "DeepSeek's agent harness, its tui profile",
+			Binaries: []string{"dsh"},
+			Args:     []string{"--profile", "tui"},
+			Methods:  methods["dsh"],
+			Next:     "its terminal agent is the tui profile: dsh plugin --profile tui add <deepseek-harness-tui> (github.com/gxinxing/deepseek-harness-tui)",
+		},
+		{
 			ID: "opencode", Name: "OpenCode", Description: "open source coding agent",
 			Binaries: binariesOf(integration.TargetOpencode),
 			Methods:  methods["opencode"],

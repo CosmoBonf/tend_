@@ -26,7 +26,7 @@ func NewManager(stateDir string) *Manager {
 	dir := filepath.Join(stateDir, "mcp")
 	backups := filepath.Join(dir, "backups")
 	return NewManagerWith(stash{path: filepath.Join(dir, "stash.json")},
-		newClaude(backups), newCodex(backups), newGemini(backups), newCursor(backups), newOpenCode(backups))
+		newClaude(backups), newCodex(backups), newGemini(backups), newCursor(backups), newOpenCode(backups), newDsh(backups))
 }
 
 // NewManagerWith is a manager over given adapters, for tests.

@@ -931,14 +931,14 @@ func TestSidebarDrawsAFoldedGroup(t *testing.T) {
 // TestGroupMenuActsOnTheGroup: a group has no record of its own, so its menu
 // carries the name rather than an identifier.
 func TestGroupMenuActsOnTheGroup(t *testing.T) {
-	m := GroupMenu("clients", false, "", 0, 0)
+	m := GroupMenu("clients", false, "", false, 0, 0)
 	if m.Group != "clients" || m.Workspace != 0 {
 		t.Errorf("group menu targets %+v", m)
 	}
 	if m.Items[0].Label != "fold" {
 		t.Errorf("an open group offers to fold, got %q", m.Items[0].Label)
 	}
-	if shut := GroupMenu("clients", true, "", 0, 0); shut.Items[0].Label != "unfold" {
+	if shut := GroupMenu("clients", true, "", false, 0, 0); shut.Items[0].Label != "unfold" {
 		t.Errorf("a folded group offers to unfold, got %q", shut.Items[0].Label)
 	}
 }
@@ -949,7 +949,7 @@ func TestGroupMenuActsOnTheGroup(t *testing.T) {
 // making a space and typing the agent's name in it.
 func TestAGroupOffersToStartAnAgent(t *testing.T) {
 	found := false
-	for _, it := range GroupMenu("clients", false, "", 0, 0).Items {
+	for _, it := range GroupMenu("clients", false, "", false, 0, 0).Items {
 		found = found || (it.Label == "new agent here..." && it.Action == MenuGroupAgent)
 	}
 	if !found {
@@ -973,11 +973,11 @@ func TestGroupMenuSaysWhichFolderItStartsIn(t *testing.T) {
 		}
 		return out
 	}
-	none := labels(GroupMenu("clients", false, "", 0, 0))
+	none := labels(GroupMenu("clients", false, "", false, 0, 0))
 	if !slices.Contains(none, "set folder...") || slices.Contains(none, "clear folder") {
 		t.Errorf("with no folder the menu is %v", none)
 	}
-	set := labels(GroupMenu("clients", false, "~/work/acme", 0, 0))
+	set := labels(GroupMenu("clients", false, "~/work/acme", false, 0, 0))
 	if !slices.Contains(set, "folder: ~/work/acme") || !slices.Contains(set, "clear folder") {
 		t.Errorf("with a folder the menu is %v", set)
 	}
@@ -1214,7 +1214,7 @@ func TestSidebarActiveRowPrefersTheCursor(t *testing.T) {
 // TestMenuStaysOnTheScreen: a menu opened near the bottom edge would lose the
 // items added last, which are the destructive ones.
 func TestMenuStaysOnTheScreen(t *testing.T) {
-	m := PaneMenu(1, 78, 19, true, false)
+	m := PaneMenu(1, 78, 19, true, false, false)
 	r := m.Rect(80, 20)
 	if r.X+r.Cols > 80 || r.Y+r.Rows > 20 {
 		t.Errorf("menu at %+v runs off an 80x20 screen", r)
@@ -1256,7 +1256,7 @@ func TestMenuHitTestSeparatesInsideFromOnAnItem(t *testing.T) {
 // TestMenuTargetsWhatItWasOpenedOn is the whole reason a menu is better than
 // a key here: there is no current selection to be wrong about.
 func TestMenuTargetsWhatItWasOpenedOn(t *testing.T) {
-	if m := PaneMenu(7, 0, 0, true, false); m.Pane != 7 || m.Tab != 0 || m.Workspace != 0 {
+	if m := PaneMenu(7, 0, 0, true, false, false); m.Pane != 7 || m.Tab != 0 || m.Workspace != 0 {
 		t.Errorf("pane menu targets %+v", m)
 	}
 	if m := SpaceMenu(3, false, 0, 0); m.Workspace != 3 || m.Pane != 0 {
@@ -1265,7 +1265,7 @@ func TestMenuTargetsWhatItWasOpenedOn(t *testing.T) {
 
 	// The last pane in a tab offers no "close pane": closing it would leave an
 	// empty tab, and "close tab" is the honest name for that.
-	alone := PaneMenu(1, 0, 0, false, false)
+	alone := PaneMenu(1, 0, 0, false, false, false)
 	for _, item := range alone.Items {
 		if item.Action == MenuClose {
 			t.Error("a lone pane should not offer to close itself")
@@ -1491,7 +1491,7 @@ func reversedRuns(g *vt.Grid, y int) string {
 // the selected row inside it leaves nothing to reverse, so the mark has to be
 // the thing the panel is not.
 func TestMenuMarksTheSelectedItem(t *testing.T) {
-	m := PaneMenu(1, 10, 4, true, false)
+	m := PaneMenu(1, 10, 4, true, false, false)
 	m.Selected = 2
 	r := m.Rect(80, 24)
 
@@ -1513,7 +1513,7 @@ func TestMenuMarksTheSelectedItem(t *testing.T) {
 
 	// With nothing selected, nothing is marked: the pointer is on the thing
 	// the menu was opened on, not on a choice.
-	none := PaneMenu(1, 10, 4, true, false)
+	none := PaneMenu(1, 10, 4, true, false, false)
 	none.Selected = -1
 	g = vt.NewGrid(80, 24, 0)
 	Draw(g, Frame{Menu: &none}, DefaultTheme())

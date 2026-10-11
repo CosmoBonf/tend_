@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#14161a">
+<title>tend · sign in</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icon.svg">
+<style>
+  :root { --bg: #14161a; --fg: #d8dee9; --dim: #7a8292; --card: #1d2026; --accent: #5ec4d8; --bad: #ff6b6b; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--fg);
+    font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 22em; margin: 0 auto; padding: 18vh 1.4em 2em; }
+  h1 { margin: 0 0 .2em; font-size: 1.6em; }
+  p { color: var(--dim); margin: 0 0 1.4em; font-size: .92em; }
+  label { display: block; margin: .8em 0 .3em; font-size: .85em; color: var(--dim); }
+  input { width: 100%; padding: .75em .8em; border: 1px solid #2f343d; border-radius: .6em;
+    background: var(--card); color: var(--fg); font: inherit; }
+  button { width: 100%; margin-top: 1.4em; padding: .8em; border: 0; border-radius: .6em;
+    background: var(--accent); color: #0b1a1e; font: inherit; font-weight: 600; }
+  .error { color: var(--bad); margin: 1em 0 0; font-size: .9em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>tend</h1>
+  <p>{{NOTE}}</p>
+  <form method="post" action="/login">
+    <label for="user">Login</label>
+    <input id="user" name="user" autocomplete="username" autocapitalize="none" required>
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <button type="submit">Sign in</button>
+  </form>
+  <div class="error">{{ERROR}}</div>
+</main>
+</body>
+</html>

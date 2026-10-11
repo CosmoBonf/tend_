@@ -227,6 +227,7 @@ func runServe(args []string) error {
 		Scrollback:     cfg.Scrollback(),
 		Shell:          cfg.Shell(),
 		DefaultSize:    pty.Size{Cols: uint16(*cols), Rows: uint16(*rows)},
+		SleepRestored:  cfg.SleepRestored(),
 		// The release check reads the settings file each time, so turning
 		// [update] version_check off or on needs no restart.
 		UpdateSource: func() (string, bool) {
@@ -238,6 +239,9 @@ func runServe(args []string) error {
 		},
 		FakeUpdate: os.Getenv("TEND_FAKE_UPDATE_VERSION"),
 	}
+	// Validated when the settings were read: an unreadable value is the
+	// default here, as everywhere else the server starts from them.
+	srvCfg.SleepAfter, _ = cfg.SleepAfter()
 	if path, err := config.Path(); err == nil {
 		srvCfg.NotesPath = filepath.Join(filepath.Dir(path), "release-notes.json")
 	}
@@ -410,8 +414,11 @@ func runList(args []string) error {
 	sort.Slice(snap.Panes, func(i, j int) bool { return snap.Panes[i].ID < snap.Panes[j].ID })
 	for _, p := range snap.Panes {
 		state := p.State
-		if !p.Running {
+		switch {
+		case !p.Running:
 			state = "exited"
+		case p.Dormant:
+			state = "asleep"
 		}
 		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\n",
 			p.ID, orDash(commandName(p.Command)), orDash(p.Agent), state, orDash(p.Title))

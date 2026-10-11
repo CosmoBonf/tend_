@@ -170,10 +170,20 @@ func (s *Server) restartPaneLocked(p session.PaneSnapshot, past paneHistory, res
 		}
 	}
 
-	err := s.startLocked(id, spec)
+	start := s.startLocked
+	if d, ok := s.dormantFor(spec); ok {
+		// Asleep: a shell where the agent was, until it is focused
+		// (dormant.go). The record keeps what wakes it, so the restore
+		// after this one finds the agent again.
+		if pane, ok := s.session.Pane(id); ok {
+			pane.Command = d.Argv
+		}
+		start = func(id session.PaneID, spec PaneSpec) error { return s.startDormantLocked(id, spec, d) }
+	}
+	err := start(id, spec)
 	if err != nil && spec.Dir != "" {
 		spec.Dir = ""
-		err = s.startLocked(id, spec)
+		err = start(id, spec)
 	}
 	if err != nil {
 		s.logf("pane %d could not be restored: %v", p.ID, err)

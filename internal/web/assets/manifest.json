@@ -1,0 +1,10 @@
+{
+  "name": "tend",
+  "short_name": "tend",
+  "description": "Watch and talk to your coding agents",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#14161a",
+  "theme_color": "#14161a",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

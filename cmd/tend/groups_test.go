@@ -78,3 +78,18 @@ func TestAGroupStartsOnlyInstalledAgents(t *testing.T) {
 		t.Errorf("offered %+v, want Claude Code and Antigravity CLI", got)
 	}
 }
+
+// TestAnAgentStartsWithItsArgsAndIsNamedOnlyWithRules: the DeepSeek Harness
+// starts as `dsh --profile tui` and is named dsh, having rules; Aider, with
+// none, starts unnamed. If it regresses, dsh opens its launcher's help
+// instead of its agent, or starting Aider from a group fails with "unknown
+// agent".
+func TestAnAgentStartsWithItsArgsAndIsNamedOnlyWithRules(t *testing.T) {
+	dsh := groupAgentSpec(proto.AgentStatus{ID: "dsh", Args: []string{"--profile", "tui"}, Detects: true}, "/bin/dsh", "/w")
+	if got := dsh.Command[len(dsh.Command)-3:]; !slices.Equal(got, []string{"/bin/dsh", "--profile", "tui"}) || dsh.Agent != "dsh" || dsh.Dir != "/w" {
+		t.Errorf("dsh starts as %v named %q in %q", dsh.Command, dsh.Agent, dsh.Dir)
+	}
+	if aider := groupAgentSpec(proto.AgentStatus{ID: "aider"}, "/bin/aider", "/w"); aider.Agent != "" {
+		t.Errorf("aider is named %q, which the server refuses", aider.Agent)
+	}
+}

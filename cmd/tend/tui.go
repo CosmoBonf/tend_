@@ -214,6 +214,14 @@ type tui struct {
 	// sel is text being marked in a pane, or nil. It belongs to this client:
 	// what one person has selected is not part of the session.
 	sel *ui.Selection
+	// lastCopied is the text tend last put on the clipboard: what the pane
+	// menu's paste pastes when the clipboard cannot be read (over ssh).
+	lastCopied string
+	// programCopy is, by pane, what its program last copied — an agent that
+	// takes the mouse selects and copies itself, and tend never sees a
+	// selection of its own there. A key typed into the pane ends it: the
+	// moment of right-clicking what was just selected has passed.
+	programCopy map[uint64]string
 	// gesture is the pane whose program was given a press, and so is owed the
 	// drags and the release that follow it.
 	gesture uint64
@@ -271,7 +279,11 @@ type tui struct {
 	// mcpMgr is the MCP manager while it is up, and mcp what it was drawn
 	// from (tui_mcp.go).
 	mcpMgr *ui.MCPManagerView
-	mcp    *mcpState
+	// permMgr is the permissions manager while it is up, and perm what it
+	// was drawn from (tui_perm.go).
+	permMgr *ui.PermManagerView
+	perm    *permState
+	mcp     *mcpState
 	// sessions is the sessions list while it is up, and sessionList what
 	// the server last said, which its search filters.
 	// about is the about panel while it is up (tui_version.go).
@@ -545,6 +557,10 @@ func (t *tui) reconnect() error {
 			t.sizes = make(map[uint64]ui.Rect)
 			t.tabFocus = nil
 			t.tab, t.focus, t.zoom = 0, 0, false
+			// The new server has been told nothing: the pane focused next is
+			// told again, even with the number the old focus had — that
+			// focus is what wakes a sleeping agent there.
+			t.seenFocus = 0
 			t.mu.Unlock()
 
 			t.requestRepaint()
@@ -842,7 +858,7 @@ func (t *tui) Event(ev proto.Event) {
 			}
 		}()
 	case proto.EventPaneClipboard:
-		t.paneCopied(ev.Data)
+		t.paneCopied(ev.Pane, ev.Data)
 	case proto.EventFocusRequest:
 		// A script or a plugin asked for this pane to be shown. Re-read
 		// first: the pane may have been made a moment ago.
@@ -1142,6 +1158,7 @@ func (t *tui) buildFrame() ui.Frame {
 		About:        t.about,
 		AgentManager: t.agentMgr,
 		MCPManager:   t.mcpMgr,
+		PermManager:  t.permMgr,
 		Sessions:     t.sessions,
 		Companies:    t.companies,
 		Tickets:      t.tickets,
@@ -1244,12 +1261,16 @@ func (t *tui) buildFrame() ui.Frame {
 
 	for _, r := range t.paneRects() {
 		p := info[r.Pane]
+		state := p.State
+		if p.Dormant {
+			state = "asleep"
+		}
 		frame.Panes = append(frame.Panes, ui.Pane{
 			ID:      r.Pane,
 			Rect:    ui.Rect{X: r.X, Y: r.Y, Cols: r.Cols, Rows: r.Rows},
 			Title:   p.Title,
 			Agent:   p.Agent,
-			State:   p.State,
+			State:   state,
 			Command: commandName(p.Command),
 			Screen:  t.screenFor(r.Pane),
 			Running: p.Running,
@@ -1350,6 +1371,9 @@ func (t *tui) handleInput(data []byte) error {
 	}
 	if t.mcpManagerUp() {
 		return t.mcpManagerInput(data)
+	}
+	if t.permManagerUp() {
+		return t.permManagerInput(data)
 	}
 	if t.sessionsUp() {
 		return t.sessionsInput(data)
@@ -1505,6 +1529,9 @@ func (t *tui) handleInput(data []byte) error {
 	}
 
 	if len(forward) > 0 && focus != 0 && !t.scrolling() {
+		t.mu.Lock()
+		delete(t.programCopy, focus)
+		t.mu.Unlock()
 		if err := t.client.SendInput(focus, forward); err != nil {
 			return err
 		}
@@ -1560,8 +1587,19 @@ func (t *tui) command(action ui.Action) error {
 		}
 		t.mu.Lock()
 		agent := t.paneAgentsLocked()[focus] != ""
+		selected := (t.sel != nil && t.sel.Pane == focus && !t.sel.Empty()) || t.programCopy[focus] != ""
+		asleep := false
+		for _, p := range t.snap.Panes {
+			if p.ID == focus {
+				asleep = p.Dormant
+			}
+		}
 		t.mu.Unlock()
-		t.openMenu(ui.PaneMenu(focus, at.X+2, at.Y+1, len(rects) > 1, agent))
+		m := ui.PaneMenu(focus, at.X+2, at.Y+1, len(rects) > 1, agent, selected)
+		if agent && t.serverKnows(proto.MethodPaneSleep) {
+			m = ui.WithSleep(m, asleep)
+		}
+		t.openMenu(m)
 		return nil
 
 	case ui.CommandRenameTab:
@@ -1576,6 +1614,8 @@ func (t *tui) command(action ui.Action) error {
 		return t.openAgentManager()
 	case ui.CommandMCPManager:
 		return t.openMCPManager()
+	case ui.CommandPermissions:
+		return t.openPermManager()
 	case ui.CommandSessions:
 		return t.openSessions()
 	case ui.CommandCompanies:

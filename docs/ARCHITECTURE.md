@@ -457,7 +457,11 @@ is checked, so a broken file is reported wherever tend is being run from.
 
 prefix+M shows every agent's MCP servers as one grid, a row per server and a
 column per agent. `internal/mcp` has one adapter per agent (Claude Code, Codex,
-Gemini CLI, Cursor, OpenCode; global scope only) over the agent's own file.
+Gemini CLI, Cursor, OpenCode, the DeepSeek Harness; global scope only) over the
+agent's own file. The DeepSeek Harness's is a YAML patch layer,
+`~/.dsh/cordis.patch.yml`, with a dsh-mcp-client plugin entry per server: it is
+edited as a YAML tree (yaml.v3, which keeps comments, quoting and `!!js`
+values), and each edit is read back and compared before it is written.
 
 - **Reading** is the file, never the agent's CLI: `claude mcp list` starts every
   server to look at one.
@@ -471,7 +475,7 @@ Gemini CLI, Cursor, OpenCode; global scope only) over the agent's own file.
   - backs up the day's first version under the state directory.
 - **Off** uses the agent's own switch where it has one that holds everywhere
   (Codex `enabled = false`, Gemini's `mcp-server-enablement.json`, OpenCode's
-  `enabled`). Elsewhere (Claude Code, Cursor) the server moves into tend's
+  `enabled`, the DeepSeek Harness's `disabled: true` on the entry). Elsewhere (Claude Code, Cursor) the server moves into tend's
   stash and comes back unchanged on.
 - **A test** speaks MCP to the server over stdio, streamable HTTP or SSE:
   initialize, initialized, tools/list.
@@ -481,6 +485,96 @@ Lists carry the names of env vars and headers, not their values, and a copy
 between agents is made there, so a secret never crosses the connection.
 The `mcp.*` requests are answered beside the connection's request loop: a
 test can take twenty seconds, and keystrokes come down the same loop.
+
+### The phone view
+
+`tend web` (`internal/web`, `cmd/tend/web.go`) is a client of the session, as the
+TUI is, serving a page for a phone over HTTP on the home network — or one address,
+a VPN's. It needs nothing new of the server: the snapshot for the agents, the
+pane subscription for the screen of the one shown, paste and input for a message.
+
+- **Pairing.** A random token, kept 0600 in the state directory
+  (`web-<session>.token`), is in the address the command prints; opening it sets
+  an HttpOnly, SameSite=Strict cookie and takes the token out of the address bar.
+  Ten wrong tokens in a minute stop the guessing; `-new-token` unpairs every phone.
+  A login is the other way in, typed on the phone: `tend web -set-password` keeps
+  a PBKDF2-SHA256 hash of the password (salted, 600 000 rounds, 0600), never the
+  password; a right sign-in sets the same cookie, a wrong one waits before it is
+  answered and counts toward the same limit. "sign out" unpairs one phone.
+- **What a phone can do** is a fixed list — a message, one of the keys an agent
+  asks for, wake, sleep — on a pane that is an agent's. There is no passthrough of
+  the session's methods (unlike `tend gui-bridge`), and no shell. Actions are JSON
+  from the page's own origin.
+- **The screen** is drawn on the computer: each frame the session sends (the whole
+  screen, as ANSI) goes through a `vt.Screen` and comes out as HTML spans, at most
+  four a second a pane, over server-sent events with the agent list. The phone
+  loads no terminal emulator, and its text selects as text.
+- **No TLS yet**: on the home network the Wi-Fi's own encryption carries it, and a
+  VPN carries it beyond; certificates, the installable app and system
+  notifications come with that phase.
+
+### Sleeping agents
+
+A restart used to start every agent of the session back in its conversation
+at once, as herdr does — a Node process of hundreds of megabytes each, most of
+them not wanted that day. Now an agent comes back asleep
+(`internal/server/dormant.go`): its pane runs a shell, under the agent's
+history and a line saying it sleeps, and the runtime keeps what wakes it — the
+resume command and the conversation. When a client focuses the pane (the
+`pane.focus` it already sends), the command is typed into the shell, as
+`agent.start` starts an agent, and the agent runs as the shell's child.
+
+A sleeping pane is a pane with a process, on purpose: handoff, persistence,
+the working directory and the drawing all assume one. Only the dormant record
+is new, and it crosses a handoff in the manifest.
+
+An agent goes to sleep from the pane's or the agent's menu (`pane.sleep`), from
+"sleep an agent..." in the main menu, which lists the agents awake across every
+space and offers every idle one at once, or
+by itself once it has been idle for `[agents] sleep_after` with no client
+focused on it or showing it. Its conversation is read first; one tend does not
+know is not put to sleep. An agent that is the shell's child gets SIGTERM, and
+SIGKILL after five seconds, and the shell stays. An agent that is the pane's
+own process (`tend new -- claude`) has its pane started again in place, same
+id and screen, as a sleeping shell. The menu says how much memory went: the
+resident memory of the agent's process group, its helpers included.
+
+### The permissions manager
+
+prefix+P shows what each agent may do without asking — a tab an agent — for
+the project of the pane it was opened over: the folder its program is in
+(`followDir`) and that folder's repository. `internal/perm` has an adapter per
+agent, each written from the agent's installed code rather than its docs:
+
+- **Claude Code**: `permissions.allow/ask/deny` and `defaultMode` in
+  `~/.claude/settings.json`, a project's `.claude/settings.json` (shared) and
+  `.claude/settings.local.json` (where its "always allow" goes), and the local
+  file of the home folder, which is the project's when Claude starts in `~`.
+  Rules are checked as Claude checks them before they are written.
+- **Codex**: its execpolicy rules, every `*.rules` in `$CODEX_HOME/rules` and a
+  project's `.codex/rules`, one `prefix_rule` a line as Codex appends them; a
+  rule over several lines is shown and left to the editor. A written file is
+  handed to `codex execpolicy check`, and put back when Codex cannot parse it.
+  `approval_policy`, `sandbox_mode` and the project's `trust_level` are edited
+  by lines in `config.toml`, checked to change nothing else.
+- **Cursor**: `permissions.allow/deny` and `approvalMode`; the panel says when
+  the mode means the list is not read.
+- **Gemini CLI**: `tools.allowed`, `tools.confirmationRequired`, `tools.exclude`
+  and `general.defaultApprovalMode`; its policy files are shown, read-only.
+- **OpenCode**: the `permission` object, whose order is its meaning (the last
+  match wins): kept in order, a new rule last, a rule covered by a later one
+  marked.
+- **The DeepSeek Harness** keeps no rules — an approval is good once — and the
+  panel sets the preset a new session starts with.
+
+A rule is named by its file, decision and text, never by a position the agent
+may have moved since the panel read it, and the server writes only files that
+are one of the agent's in that project. Files are written as the MCP manager
+writes them (`internal/agentfile`: re-edited when changed meanwhile, atomic,
+mode kept, backed up daily); a JSON file keeps its keys in their order. A file
+opens in an editor on the server's machine: a terminal editor in a pane beside
+the one the panel was over, the panel coming back read again when it closes;
+a graphical one in a window, offered only where there is a display.
 
 ## Scope
 

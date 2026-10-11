@@ -1,0 +1,42 @@
+# The DeepSeek Harness (dsh) in its terminal profile, `dsh --profile tui` —
+# the deepseek-harness-tui plugin (github.com/gxinxing/deepseek-harness-tui).
+# tend's own; herdr has none. Read from its source (src/ui.js): while a turn
+# runs it draws a status row above the composer, a braille spinner, " Working",
+# the elapsed time and "esc interrupt" at the right; when idle it draws the
+# composer ("❯ Ask anything") and no status row. Asked whether an action may
+# run (approval policy `ask`), it puts "▲ approval needed · <tool>" in the
+# composer's place (auth-com-br/dsh-tui) — the user is needed, so blocked,
+# over the working row still drawn above it; so is a question the agent asks
+# ("? question" in the composer's place).
+id = "dsh"
+version = "2026.10.03.1"
+min_engine_version = 1
+updated_at = "2026-10-03T00:00:00Z"
+aliases = ["deepseek-harness"]
+
+[[rules]]
+id = "approval_prompt"
+state = "blocked"
+priority = 300
+region = "bottom_non_empty_lines(8)"
+visible_blocker = true
+line_regex = ['^\s*▲ approval needed · ']
+
+[[rules]]
+id = "question_prompt"
+state = "blocked"
+priority = 290
+region = "bottom_non_empty_lines(30)"
+visible_blocker = true
+all = [
+  { line_regex = ['^\s*\? question'] },
+  { any = [{ contains = ["enter confirm"] }, { contains = ["enter send"] }] },
+]
+
+[[rules]]
+id = "status_row_working"
+state = "working"
+priority = 100
+region = "bottom_non_empty_lines(8)"
+visible_working = true
+line_regex = ['^\s*[⠀-⣿]\s+Working\b.*esc interrupt']

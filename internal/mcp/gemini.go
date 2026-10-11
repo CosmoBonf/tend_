@@ -158,7 +158,7 @@ func (g *geminiAgent) setEnablement(name string, on bool) error {
 	if err != nil {
 		return err
 	}
-	opts := writeOpts{backups: g.backups, backupName: "gemini-" + filepath.Base(path), mode: 0o644}
+	opts := writeOpts{Backups: g.backups, BackupName: "gemini-" + filepath.Base(path), Mode: 0o644}
 	return editFile(path, opts, func(data []byte) ([]byte, error) {
 		state, err := decodeObject(data)
 		if err != nil {

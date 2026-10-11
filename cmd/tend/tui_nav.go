@@ -995,6 +995,11 @@ func (t *tui) applyAgentViewLocked(view *agentview.View, rows []ui.SidebarRow, i
 // displayState is the state as the list shows it: herdr's "done" for an
 // agent that finished while nobody was looking.
 func displayState(p proto.PaneInfo) string {
+	if p.Dormant {
+		// A sleeping agent (the server's dormant.go): a shell runs where it
+		// was, and its state is that it sleeps.
+		return "asleep"
+	}
 	if p.Done && p.State == "idle" {
 		return "done"
 	}

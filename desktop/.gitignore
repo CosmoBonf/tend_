@@ -1,0 +1,11 @@
+# Neutralino's binaries and client, fetched by `npm run setup` (neu update).
+/bin
+/dist
+resources/js/neutralino.js
+resources/js/neutralino.d.ts
+# xterm.js, copied from node_modules by `npm run setup`.
+/node_modules
+resources/vendor
+.storage
+*.log
+.tmp

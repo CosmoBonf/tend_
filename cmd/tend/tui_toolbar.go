@@ -19,6 +19,7 @@ var toolLabels = map[string]string{
 	ui.ToolFiles:    "Files — the files panel (prefix+f)",
 	ui.ToolAgents:   "Agents — find and install agents (prefix+A)",
 	ui.ToolMCP:      "MCP servers — the tools your agents can use: on/off, test, add (prefix+M)",
+	ui.ToolPerms:    "Permissions — what your agents may do without asking (prefix+P)",
 	ui.ToolSessions: "Sessions — find, resume and delete agent sessions (prefix+S)",
 	ui.ToolIssues:   "Issues — this project's GitHub issues (prefix+I)",
 	ui.ToolErrors:   "Errors — what GlitchTip caught, to fix (prefix+E)",
@@ -77,6 +78,8 @@ func (t *tui) runTool(id string) error {
 		return t.openAgentManager()
 	case ui.ToolMCP:
 		return t.openMCPManager()
+	case ui.ToolPerms:
+		return t.openPermManager()
 	case ui.ToolSessions:
 		return t.openSessions()
 	case ui.ToolIssues:

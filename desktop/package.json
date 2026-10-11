@@ -1,0 +1,16 @@
+{
+  "name": "tend-desktop",
+  "private": true,
+  "description": "tend as a desktop app (issue #40, phase 0): a Neutralino window on a tend session",
+  "license": "Apache-2.0",
+  "scripts": {
+    "setup": "neu update && node scripts/vendor.mjs",
+    "start": "neu run",
+    "build": "neu build --release"
+  },
+  "devDependencies": {
+    "@neutralinojs/neu": "^11.0.0",
+    "@xterm/addon-webgl": "^0.18.0",
+    "@xterm/xterm": "^5.5.0"
+  }
+}

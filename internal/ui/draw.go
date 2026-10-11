@@ -282,6 +282,9 @@ func (t Theme) StateStyle(state string, running bool) vt.Style {
 		return t.Idle
 	case "done":
 		return t.Done
+	case "asleep":
+		// Present, and costing nothing: drawn as quietly as an exited pane.
+		return t.Exited
 	default:
 		return t.Unknown
 	}
@@ -424,6 +427,8 @@ type Frame struct {
 	AgentManager *AgentManagerView
 	// MCPManager is the MCP manager, when it is up.
 	MCPManager *MCPManagerView
+	// PermManager is the permissions manager, when it is up.
+	PermManager *PermManagerView
 	// Sessions is the sessions list, when it is up (sessions.go).
 	Sessions *SessionsView
 	// Companies is the companies panel, when it is up (companies.go).
@@ -642,6 +647,9 @@ func Draw(dst *vt.Grid, f Frame, theme Theme) {
 	}
 	if f.MCPManager != nil {
 		drawMCPManager(dst, f.MCPManager, theme)
+	}
+	if f.PermManager != nil {
+		drawPermManager(dst, f.PermManager, theme)
 	}
 	if f.Sessions != nil {
 		drawSessions(dst, f.Sessions, theme)
@@ -1006,6 +1014,8 @@ func stateMarker(state string, running bool) string {
 		return "▲ "
 	case "idle":
 		return "○ "
+	case "asleep":
+		return "asleep "
 	default:
 		return ""
 	}

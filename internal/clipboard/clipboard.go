@@ -114,3 +114,70 @@ func run(path string, args []string, text string) error {
 		return nil
 	}
 }
+
+// readers are the tools that read the clipboard back, in the order Copy
+// writes it, so a paste reads where the last copy went.
+func readers() []tool {
+	if runtime.GOOS == "darwin" {
+		return []tool{{name: "pbpaste"}}
+	}
+	return []tool{
+		{name: "wl-paste", args: []string{"--no-newline"}, needs: "WAYLAND_DISPLAY"},
+		{name: "xclip", args: []string{"-selection", "clipboard", "-o"}, needs: "DISPLAY"},
+		{name: "xsel", args: []string{"--clipboard", "--output"}, needs: "DISPLAY"},
+	}
+}
+
+// Paste reads the system clipboard and reports which tool read it.
+//
+// Over ssh it is ErrNoTool, for the reason Copy is: the clipboard this
+// process could read belongs to a desktop nobody is looking at, and the one
+// in front of the user cannot be read from here — terminals take OSC 52
+// writes, and almost none answer reads.
+func Paste() (string, string, error) {
+	if Remote() {
+		return "", "", ErrNoTool
+	}
+	var firstErr error
+	for _, t := range readers() {
+		if t.needs != "" && os.Getenv(t.needs) == "" {
+			continue
+		}
+		path, err := exec.LookPath(t.name)
+		if err != nil {
+			continue
+		}
+		cmd := exec.Command(path, t.args...)
+		var out strings.Builder
+		cmd.Stdout = &out
+		if err := cmd.Start(); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		done := make(chan error, 1)
+		go func() { done <- cmd.Wait() }()
+		select {
+		case err := <-done:
+			if err != nil {
+				// An empty clipboard is an error to wl-paste and xclip; it
+				// is "nothing to paste", which the caller says.
+				if firstErr == nil {
+					firstErr = err
+				}
+				continue
+			}
+			return out.String(), t.name, nil
+		case <-time.After(copyTimeout):
+			_ = cmd.Process.Kill()
+			if firstErr == nil {
+				firstErr = errors.New("clipboard: " + t.name + " did not answer")
+			}
+		}
+	}
+	if firstErr != nil {
+		return "", "", firstErr
+	}
+	return "", "", ErrNoTool
+}

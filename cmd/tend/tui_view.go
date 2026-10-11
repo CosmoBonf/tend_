@@ -297,6 +297,17 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 		return err
 	}
 	switch ev.Kind {
+	case ui.MouseWheelUp, ui.MouseWheelDown:
+		step := 1
+		if ev.Kind == ui.MouseWheelUp {
+			step = -1
+		}
+		if t.scrollMenu(ev.X, ev.Y, 3*step) {
+			t.wakeUp()
+			return nil
+		}
+	}
+	switch ev.Kind {
 	case ui.MouseWheelUp:
 		if t.scrollSidebar(ev.X, ev.Y, -sidebarScrollStep) {
 			return nil
@@ -307,6 +318,10 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 			// pager, an editor — and showing tend's scrollback instead means
 			// the wheel does nothing the user recognises.
 			if took, err := t.forwardMouse(pane, ev, false); took {
+				t.focusPane(pane)
+				return err
+			}
+			if sent, err := t.wheelAsKeys(pane, true); sent {
 				t.focusPane(pane)
 				return err
 			}
@@ -324,6 +339,9 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 		}
 		if pane := t.paneAt(ev.X, ev.Y); pane != 0 {
 			if took, err := t.forwardMouse(pane, ev, false); took {
+				return err
+			}
+			if sent, err := t.wheelAsKeys(pane, false); sent {
 				return err
 			}
 		}
@@ -1030,4 +1048,38 @@ func (t *tui) serverKnows(method string) bool {
 		}
 	}
 	return false
+}
+
+// wheelAsKeys sends a notch of the wheel to a pane as an arrow key, when
+// the pane says that is what the wheel means there: a full-screen program
+// on the alternate screen that does not take the mouse (herdr's
+// WheelRouting::AlternateScroll, encode_alternate_scroll — one key per
+// notch). Showing tend's scrollback instead scrolled nothing the program
+// drew: a TUI redraws in place and its past is not in the scrollback.
+func (t *tui) wheelAsKeys(pane uint64, up bool) (bool, error) {
+	t.mu.Lock()
+	var info proto.PaneInfo
+	for _, p := range t.snap.Panes {
+		if p.ID == pane {
+			info = p
+		}
+	}
+	t.mu.Unlock()
+	if !info.WheelKeys || t.scrolling() {
+		return false, nil
+	}
+	return true, t.client.SendInput(pane, arrowKey(up, info.AppCursor))
+}
+
+// arrowKey is the up or down arrow as a program reading the keyboard gets
+// it: SS3 in application cursor mode (DECCKM), CSI otherwise.
+func arrowKey(up, app bool) []byte {
+	final := byte('B')
+	if up {
+		final = 'A'
+	}
+	if app {
+		return []byte{0x1b, 'O', final}
+	}
+	return []byte{0x1b, '[', final}
 }

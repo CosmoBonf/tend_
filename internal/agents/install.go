@@ -17,6 +17,7 @@ func init() {
 		codexDocs    = "https://github.com/openai/codex"
 		geminiDocs   = "https://github.com/google-gemini/gemini-cli"
 		agyDocs      = "https://github.com/google-antigravity/antigravity-cli"
+		dshDocs      = "https://github.com/deepseek-ai/deepseek-harness"
 		opencodeDocs = "https://github.com/anomalyco/opencode"
 		copilotDocs  = "https://github.com/github/copilot-cli"
 		qwenDocs     = "https://github.com/QwenLM/qwen-code"
@@ -62,6 +63,13 @@ func init() {
 		// documents for macOS and Linux.
 		"agy": {
 			script("curl -fsSL https://antigravity.google/cli/install.sh | bash", agyDocs),
+		},
+		// The harness's package, which its README runs with npx (`npx
+		// @deepseek-ai/dsh web`) and the tui plugin's README installs
+		// globally, as here; read on 2026-10-03. Its terminal profile is a
+		// third-party plugin set up by hand (Next): DeepSeek ships none.
+		"dsh": {
+			npm("@deepseek-ai/dsh", dshDocs),
 		},
 		"opencode": {
 			script("curl -fsSL https://opencode.ai/install | bash", opencodeDocs),

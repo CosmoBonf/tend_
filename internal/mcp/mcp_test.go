@@ -17,7 +17,7 @@ func fakeHome(t *testing.T) (string, *Manager) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	for _, v := range []string{"CLAUDE_CONFIG_DIR", "CODEX_HOME", "CURSOR_CONFIG_DIR", "GEMINI_CLI_HOME", "XDG_CONFIG_HOME"} {
+	for _, v := range []string{"CLAUDE_CONFIG_DIR", "CODEX_HOME", "CURSOR_CONFIG_DIR", "GEMINI_CLI_HOME", "XDG_CONFIG_HOME", "DSH_HOME"} {
 		t.Setenv(v, "")
 	}
 	return home, NewManager(filepath.Join(home, "state"))
@@ -361,7 +361,7 @@ func TestAWriteKeepsTheModeFollowsSymlinksAndBacksUp(t *testing.T) {
 		t.Fatal(err)
 	}
 	backups := filepath.Join(dir, "backups")
-	err := editFile(link, writeOpts{backups: backups, backupName: "x-real.json"}, func(data []byte) ([]byte, error) {
+	err := editFile(link, writeOpts{Backups: backups, BackupName: "x-real.json"}, func(data []byte) ([]byte, error) {
 		return editServers(data, "mcpServers", func(s map[string]json.RawMessage) error {
 			s["new"] = json.RawMessage(`{}`)
 			return nil

@@ -47,6 +47,79 @@ type Config struct {
 	// server reads it again each time it checks, so a rule written here
 	// applies from the next agent on, with no restart.
 	Policy policy.Policy `toml:"policy"`
+	// Web is `tend web`'s: where it listens for a phone.
+	Web Web `toml:"web"`
+	// Agents is how the agents' processes are kept: asleep after a restart
+	// and when idle, to give their memory back.
+	Agents Agents `toml:"agents"`
+	// Permissions is the permissions manager's (internal/perm): the editor
+	// it opens the agents' files in, and files of agents it has no adapter
+	// for.
+	Permissions Permissions `toml:"permissions"`
+}
+
+// Web configures `tend web`, the page a phone watches the agents on.
+type Web struct {
+	// Listen is the address and port it listens on: "0.0.0.0:7777" (every
+	// network of this machine), or one address — the VPN's, say — to be
+	// reached on that one alone.
+	Listen string `toml:"listen"`
+}
+
+// Agents configures sleeping agents (internal/server/dormant.go): a sleeping
+// agent is a shell in its pane, woken in its conversation when the pane is
+// focused.
+type Agents struct {
+	// SleepRestored restores agents asleep after a restart rather than
+	// starting them all at once. Unset is on.
+	SleepRestored *bool `toml:"sleep_restored"`
+	// SleepAfter puts an agent to sleep once it has been idle that long with
+	// nobody looking at it: "30m", "2h"; "0" never does. Unset is 30m.
+	SleepAfter string `toml:"sleep_after"`
+}
+
+// SleepRestored is whether agents come back asleep after a restart.
+func (c Config) SleepRestored() bool {
+	return c.Agents.SleepRestored == nil || *c.Agents.SleepRestored
+}
+
+// SleepAfter is how long an idle, unwatched agent is left awake; zero is
+// for ever.
+func (c Config) SleepAfter() (time.Duration, error) {
+	v := strings.TrimSpace(c.Agents.SleepAfter)
+	switch v {
+	case "":
+		return 30 * time.Minute, nil
+	case "0":
+		return 0, nil
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return 0, fmt.Errorf("agents.sleep_after: %w", err)
+	}
+	if d < 0 {
+		return 0, fmt.Errorf("agents.sleep_after cannot be negative, got %s", v)
+	}
+	return d, nil
+}
+
+// Permissions configures the permissions manager.
+type Permissions struct {
+	// Editor opens an agent's file: "gedit", "nano", "code --wait". Empty
+	// is $VISUAL, then $EDITOR, then nano.
+	Editor string `toml:"editor"`
+	// Files are the permission files of agents tend has no adapter for,
+	// listed in the panel and opened in the editor:
+	// [[permissions.files]] agent = "Kimi", path = "~/.kimi/config.toml"
+	Files []PermissionFile `toml:"files"`
+}
+
+// PermissionFile is one file of an agent tend has no adapter for. Scope is
+// global, project or local; empty is global.
+type PermissionFile struct {
+	Agent string `toml:"agent"`
+	Path  string `toml:"path"`
+	Scope string `toml:"scope"`
 }
 
 // Activity is the record of what agents did (internal/activity, `tend
@@ -484,11 +557,12 @@ type Toolbar struct {
 }
 
 // ToolbarTools are the tools a toolbar can hold, in their order.
-var ToolbarTools = []string{"files", "agents", "mcp", "sessions", "issues", "errors", "tickets", "browser", "context"}
+var ToolbarTools = []string{"files", "agents", "mcp", "permissions", "sessions", "issues", "errors", "tickets", "browser", "context"}
 
 // DefaultToolbarTools are the ones it holds when the settings do not say:
-// all but mcp, since a ninth tool does not fit the sidebar's default width
-// and the last one would be cut off. The MCP manager is in the menu.
+// all but mcp and permissions, since a ninth tool does not fit the
+// sidebar's default width and the last one would be cut off. Both managers
+// are in the menu.
 var DefaultToolbarTools = []string{"files", "agents", "sessions", "issues", "errors", "tickets", "browser", "context"}
 
 // ToolbarItems is the tools the sidebar shows, none when it is off.
@@ -678,6 +752,9 @@ func parse(data, path string) (Config, error) {
 
 func (c Config) validate() error {
 	if _, err := c.PrefixKey(); err != nil {
+		return err
+	}
+	if _, err := c.SleepAfter(); err != nil {
 		return err
 	}
 	if _, err := c.DetectInterval(); err != nil {
@@ -1056,6 +1133,20 @@ detect_interval = "150ms"
 # tabs and splits, each pane in the directory it was in and under what it had
 # said. Programs do not survive a restart; the place does.
 persist = true
+
+[web]
+# Where "tend web" listens for a phone: every network of this machine, or one
+# address (a VPN's) to be reached on that one alone.
+listen = "0.0.0.0:7777"
+
+[agents]
+# After a restart, agents come back asleep: a shell where each was, and the
+# agent resumed in its conversation when you focus its pane. Off starts them
+# all at once, which with many agents can use up the machine's memory.
+sleep_restored = true
+# An agent idle that long, with nobody focused on it or looking at it, goes
+# to sleep and gives its memory back; it wakes when you go to it. "0" never.
+sleep_after = "30m"
 
 [worktrees]
 # Where "tend worktree create" puts a new checkout, as

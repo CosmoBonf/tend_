@@ -119,6 +119,35 @@ func (t *tui) endSelection() bool {
 		return true
 	}
 
+	t.copySelectionText(sel)
+	return true
+}
+
+// copySelection copies the selection again: the pane menu's "copy". A
+// selection is copied when the drag ends already, but a person who
+// right-clicks it to copy should not have to know that.
+//
+// In a pane whose program takes the mouse, the selection is the program's:
+// what it copied is copied again.
+func (t *tui) copySelection(pane uint64) {
+	t.mu.Lock()
+	if t.sel != nil && t.sel.Pane == pane && !t.sel.Empty() {
+		sel := *t.sel
+		t.mu.Unlock()
+		t.copySelectionText(sel)
+		return
+	}
+	text := t.programCopy[pane]
+	t.mu.Unlock()
+	if text == "" {
+		t.setMessage("nothing selected to copy", false)
+		return
+	}
+	t.copyToClipboard(text, copiedMessage(text, false))
+}
+
+// copySelectionText puts a selection's text on the clipboard.
+func (t *tui) copySelectionText(sel ui.Selection) {
 	// The text comes from the server, not from the rows on screen. A drag
 	// that scrolled covers more than the view is showing, and the scrollback
 	// it covers is not here.
@@ -133,17 +162,49 @@ func (t *tui) endSelection() bool {
 	})
 	if err != nil {
 		t.setMessage("copy failed: "+err.Error(), true)
-		return true
+		return
 	}
 	if strings.TrimSpace(text) == "" {
 		// Blank is not something to put on a clipboard, and saying "copied"
 		// for it is worse than saying nothing: the user pastes and finds the
 		// last real thing they copied replaced by empty lines.
 		t.setMessage("nothing to copy there", false)
-		return true
+		return
 	}
 	t.copyToClipboard(text, copiedMessage(text, sel.Block))
-	return true
+}
+
+// pasteInto pastes the clipboard into a pane: the pane menu's "paste". The
+// server writes it, in bracketed-paste markers when the program asked for
+// them, so a pasted block of lines is one paste to a shell or an agent and
+// not lines run one by one.
+//
+// Where the clipboard cannot be read — over ssh, or with no tool — what tend
+// itself last copied is pasted, which is the copy a person usually means.
+func (t *tui) pasteInto(pane uint64) {
+	if pane == 0 {
+		return
+	}
+	if !t.client.Supports(proto.MethodPanePaste) {
+		t.setMessage("this session's server cannot paste yet: tend handoff", true)
+		return
+	}
+	text, via, err := clipboard.Paste()
+	if err != nil || text == "" {
+		t.mu.Lock()
+		text = t.lastCopied
+		t.mu.Unlock()
+		via = "tend's last copy"
+	}
+	if text == "" {
+		t.setMessage("nothing to paste", false)
+		return
+	}
+	if err := t.client.PastePane(pane, text); err != nil {
+		t.setMessage("paste failed: "+err.Error(), true)
+		return
+	}
+	t.setMessage("pasted "+itoaInt(len([]rune(text)))+" characters · "+via, false)
 }
 
 // clearSelection drops the mark, if there is one.
@@ -171,6 +232,9 @@ func (t *tui) clearSelection() {
 // So the message reports what is actually known: a tool that took the text can
 // be waited on and believed, and a sequence can only be said to have been sent.
 func (t *tui) copyToClipboard(text, what string) {
+	t.mu.Lock()
+	t.lastCopied = text
+	t.mu.Unlock()
 	if seq := ui.SetClipboard(text); seq != "" {
 		_, _ = io.WriteString(os.Stdout, seq)
 	}
@@ -213,10 +277,16 @@ func copiedMessage(text string, block bool) string {
 // the selecting and this is it handing over the result. It arrives on the
 // client's reader goroutine, and a clipboard tool is a process that can take
 // a moment, so the work is moved off it.
-func (t *tui) paneCopied(text []byte) {
+func (t *tui) paneCopied(pane uint64, text []byte) {
 	if len(text) == 0 {
 		return
 	}
+	t.mu.Lock()
+	if t.programCopy == nil {
+		t.programCopy = map[uint64]string{}
+	}
+	t.programCopy[pane] = string(text)
+	t.mu.Unlock()
 	go t.copyToClipboard(string(text), copiedMessage(string(text), false))
 }
 

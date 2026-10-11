@@ -55,6 +55,10 @@ type Definition struct {
 	// Next is what to run once it is installed, to give it to the agents,
 	// as its project documents it.
 	Next string
+	// Args are what the executable is started with to be the agent: the
+	// DeepSeek Harness is a launcher, and its terminal agent is the tui
+	// profile. Nil for an agent started bare.
+	Args []string
 }
 
 // Status is an agent as found on this machine.

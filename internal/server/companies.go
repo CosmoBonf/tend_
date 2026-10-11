@@ -100,6 +100,8 @@ func (s *Server) Group(method string, p proto.GroupParams) error {
 			return sess.RenameGroup(p.Group, p.Name)
 		case proto.MethodGroupDelete:
 			return sess.RemoveGroup(p.Group)
+		case proto.MethodGroupMoveCompany:
+			return sess.MoveGroupToCompany(p.Group, session.CompanyID(p.From), session.CompanyID(p.To))
 		}
 		return fmt.Errorf("%w: %s", proto.ErrUnknownMethod, method)
 	})

@@ -212,3 +212,74 @@ func TestAGroupKeepsItsFolder(t *testing.T) {
 	}
 	check(t, s)
 }
+
+// TestMovingAGroupToAnotherCompanyTakesItsSpaces: a group moved from one
+// company to another takes its spaces with it — they leave the first and
+// join the second — and is listed under the second only; a space that is
+// also in a third company stays there. Moved with no company named, it
+// leaves every company for the one it goes to. If it regresses, moving a
+// client's group to another company leaves its spaces behind, or the group
+// still listed where it left.
+func TestMovingAGroupToAnotherCompanyTakesItsSpaces(t *testing.T) {
+	s := New()
+	a, b, other := s.AddWorkspace("a"), s.AddWorkspace("b"), s.AddWorkspace("other")
+	acme, _ := s.AddCompany("Acme")
+	auth, _ := s.AddCompany("Auth")
+	both, _ := s.AddCompany("Both")
+	for _, w := range []*Workspace{a, b, other} {
+		_ = s.AssignCompany(acme.ID, w.ID)
+	}
+	_ = s.AssignCompany(both.ID, b.ID)
+	_ = s.GroupWorkspace(a.ID, "client")
+	_ = s.GroupWorkspace(b.ID, "client")
+
+	if err := s.MoveGroupToCompany("client", acme.ID, auth.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.CompaniesOf(a.ID); !equalIDs(got, []CompanyID{auth.ID}) {
+		t.Errorf("a is in %v, want Auth only", got)
+	}
+	if got := s.CompaniesOf(b.ID); !equalIDs(got, []CompanyID{auth.ID, both.ID}) {
+		t.Errorf("b is in %v, want Auth and still Both", got)
+	}
+	if got := s.CompaniesOf(other.ID); !equalIDs(got, []CompanyID{acme.ID}) {
+		t.Errorf("a space outside the group moved: %v", got)
+	}
+	g, _ := s.Group("client")
+	if slices.Contains(g.Companies, acme.ID) || !slices.Contains(g.Companies, auth.ID) {
+		t.Errorf("the group is listed under %v", g.Companies)
+	}
+
+	// From every company: Both lets go of b too.
+	if err := s.MoveGroupToCompany("client", 0, acme.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.CompaniesOf(b.ID); !equalIDs(got, []CompanyID{acme.ID}) {
+		t.Errorf("moved from every company, b is in %v", got)
+	}
+	if g, _ := s.Group("client"); !equalIDs(g.Companies, []CompanyID{acme.ID}) {
+		t.Errorf("the group is listed under %v, want Acme only", g.Companies)
+	}
+
+	// An empty group moves too.
+	_ = s.GroupWorkspace(a.ID, "")
+	_ = s.GroupWorkspace(b.ID, "")
+	if err := s.MoveGroupToCompany("client", acme.ID, auth.ID); err != nil {
+		t.Fatal(err)
+	}
+	if g, _ := s.Group("client"); !equalIDs(g.Companies, []CompanyID{auth.ID}) {
+		t.Errorf("the empty group is listed under %v", g.Companies)
+	}
+
+	if err := s.MoveGroupToCompany("nothing", acme.ID, auth.ID); !errors.Is(err, ErrNoSuchGroup) {
+		t.Errorf("a group that is not there: %v", err)
+	}
+	if err := s.MoveGroupToCompany("client", acme.ID, 99); !errors.Is(err, ErrNoSuchCompany) {
+		t.Errorf("a company that is not there: %v", err)
+	}
+	check(t, s)
+}
+
+func equalIDs(a, b []CompanyID) bool {
+	return slices.Equal(a, b)
+}

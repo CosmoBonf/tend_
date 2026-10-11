@@ -96,6 +96,10 @@ const (
 	// CommandMCPManager opens the MCP manager: the agents' MCP servers, to
 	// switch on and off, test, add and remove (tend's own, prefix+M).
 	CommandMCPManager
+	// CommandPermissions opens the permissions manager: what each agent
+	// may do without asking, to change and to open in an editor (tend's
+	// own, prefix+P).
+	CommandPermissions
 	// CommandSessions opens the sessions list: the conversations agents
 	// keep on this machine, to find, resume and delete (tend's own,
 	// prefix+S).
@@ -223,6 +227,8 @@ func (c Command) String() string {
 		return "agent-manager"
 	case CommandMCPManager:
 		return "mcp-manager"
+	case CommandPermissions:
+		return "permissions"
 	case CommandSessions:
 		return "sessions"
 	case CommandIssues:
@@ -277,6 +283,7 @@ var Keys = []struct {
 	{"a", CommandToggleAgents, "show agents"},
 	{"A", CommandAgentManager, "agent manager: find, install"},
 	{"M", CommandMCPManager, "MCP servers: on/off, test, add, remove"},
+	{"P", CommandPermissions, "agent permissions: what they may do unasked"},
 	{"S", CommandSessions, "agent sessions: find, resume, delete"},
 	{"I", CommandIssues, "GitHub issues of this project"},
 	{"E", CommandErrors, "errors from GlitchTip, to fix"},
@@ -372,6 +379,7 @@ func DefaultBindings() map[string]Command {
 		"a":         CommandToggleAgents,
 		"A":         CommandAgentManager,
 		"M":         CommandMCPManager,
+		"P":         CommandPermissions,
 		"S":         CommandSessions,
 		"I":         CommandIssues,
 		"E":         CommandErrors,

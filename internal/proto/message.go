@@ -122,6 +122,9 @@ const (
 	MethodGroupDelete = "group.delete"
 	// MethodGroupSetDir sets the folder a group's new spaces start in.
 	MethodGroupSetDir = "group.set_dir"
+	// MethodGroupMoveCompany moves a group and its spaces from one company
+	// to another.
+	MethodGroupMoveCompany = "group.move_company"
 	// The MCP methods are the MCP manager's (internal/mcp): the agents'
 	// servers, read and written where the agents run, and tested there.
 	// They are answered off the connection's request loop, since a test
@@ -131,6 +134,20 @@ const (
 	MethodMCPSetEnabled = "mcp.set_enabled"
 	MethodMCPAdd        = "mcp.add"
 	MethodMCPRemove     = "mcp.remove"
+	// The perm methods are the permissions manager's (internal/perm): what
+	// each agent may do without asking, read and written where the agents
+	// run, for the project of a pane. A write names its file, which the
+	// server checks is one of the agent's there before writing it.
+	MethodPermList        = "perm.list"
+	MethodPermAdd         = "perm.add"
+	MethodPermRemove      = "perm.remove"
+	MethodPermSetDecision = "perm.set_decision"
+	MethodPermMove        = "perm.move"
+	MethodPermSetMode     = "perm.set_mode"
+	// MethodPermEditors lists the editors on the server's machine, and
+	// MethodPermOpen opens one of the agents' files in one.
+	MethodPermEditors = "perm.editors"
+	MethodPermOpen    = "perm.open"
 	// MethodDirList lists the folders in a folder on the server's machine,
 	// for picking one with the mouse rather than typing its path: the
 	// folders that matter are where the panes run, which over ssh is not
@@ -139,11 +156,19 @@ const (
 	// MethodPaneFocus says which pane the client is looking at, so programs
 	// that asked for focus events are told.
 	MethodPaneFocus = "pane.focus"
+	// MethodPaneSleep ends a pane's agent and leaves it asleep, to be woken
+	// in its conversation; MethodPaneWake wakes it. Focusing a sleeping
+	// agent's pane wakes it too.
+	MethodPaneSleep = "pane.sleep"
+	MethodPaneWake  = "pane.wake"
 	// MethodPaneRename gives a pane a name that its program cannot overwrite.
 	MethodPaneRename = "pane.rename"
 	// MethodPaneEditScrollback opens a pane's history in an editor, in a pane
 	// of its own.
 	MethodPaneEditScrollback = "pane.edit_scrollback"
+	// MethodPanePaste writes text to a pane as a paste: in bracketed-paste
+	// markers when the program asked for them, which only the server knows.
+	MethodPanePaste = "pane.paste"
 	// MethodPaneGraphics fetches the images a pane holds and where they go.
 	MethodPaneGraphics  = "pane.graphics"
 	MethodPaneSwap      = "pane.swap"
@@ -220,8 +245,11 @@ var KnownMethods = []string{
 	MethodPaneCopySearch,
 	MethodServerReloadConfig,
 	MethodPaneFocus,
+	MethodPaneSleep,
+	MethodPaneWake,
 	MethodPaneRename,
 	MethodPaneEditScrollback,
+	MethodPanePaste,
 	MethodPaneGraphics,
 	MethodPaneSwap,
 	MethodTabMove,
@@ -261,12 +289,21 @@ var KnownMethods = []string{
 	MethodGroupRename,
 	MethodGroupDelete,
 	MethodGroupSetDir,
+	MethodGroupMoveCompany,
 	MethodDirList,
 	MethodMCPList,
 	MethodMCPTest,
 	MethodMCPSetEnabled,
 	MethodMCPAdd,
 	MethodMCPRemove,
+	MethodPermList,
+	MethodPermAdd,
+	MethodPermRemove,
+	MethodPermSetDecision,
+	MethodPermMove,
+	MethodPermSetMode,
+	MethodPermEditors,
+	MethodPermOpen,
 }
 
 // ErrUnknownMethod is what a server answers when it has never heard of a
@@ -301,6 +338,12 @@ type HelloResult struct {
 const (
 	// FeaturePaneClipboard: a pane's OSC 52 write is passed on as an event.
 	FeaturePaneClipboard = "pane-clipboard"
+	// FeatureWheelKeys: the snapshot says when the wheel over a pane is to
+	// be sent as arrow keys (alternate scroll).
+	FeatureWheelKeys = "wheel-keys"
+	// FeatureDormant: the snapshot says which panes hold a sleeping agent,
+	// which a client draws as asleep rather than as a shell.
+	FeatureDormant = "dormant"
 	// FeatureMouseDetail: the snapshot says how much mouse a pane asked for
 	// and in which encoding.
 	FeatureMouseDetail = "mouse-detail"
@@ -363,7 +406,7 @@ var KnownFeatures = []string{
 	FeatureLifecycle, FeatureWindowTitle, FeatureTabBarStatus, FeatureDone, FeatureWindowFocus,
 	FeatureFocusRequest, FeatureAgentView, FeatureServerShell, FeaturePopup, FeatureUpdate,
 	FeatureDockUnless, FeatureContext, FeatureContextArrived, FeatureFollowCwd, FeatureGitHubFolders,
-	FeatureGroups,
+	FeatureGroups, FeatureWheelKeys, FeatureDormant,
 }
 
 // --- session ---------------------------------------------------------------
@@ -391,6 +434,12 @@ type PaneInfo struct {
 	MouseDrag   bool `json:"mouse_drag,omitempty"`
 	MouseMotion bool `json:"mouse_motion,omitempty"`
 	MouseSGR    bool `json:"mouse_sgr,omitempty"`
+	// WheelKeys: the wheel over the pane is sent as arrow keys — a
+	// full-screen program on the alternate screen that does not take the
+	// mouse (mode 1007, herdr's alternate scroll) — in application form
+	// when AppCursor is set.
+	WheelKeys bool `json:"wheel_keys,omitempty"`
+	AppCursor bool `json:"app_cursor,omitempty"`
 	// Graphics changes whenever a pane's images or their placements do, so a
 	// client can tell whether to ask for them again.
 	Graphics uint64 `json:"graphics,omitempty"`
@@ -404,6 +453,9 @@ type PaneInfo struct {
 	Tokens      []AgentToken      `json:"tokens,omitempty"`
 	StateLabels map[string]string `json:"state_labels,omitempty"`
 	ExitErr     string            `json:"exit_error,omitempty"`
+	// Dormant is a pane whose agent sleeps: a shell runs where it was, and
+	// Agent names the agent.
+	Dormant bool `json:"dormant,omitempty"`
 
 	Command []string `json:"command,omitempty"`
 	Dir     string   `json:"dir,omitempty"`
@@ -443,6 +495,12 @@ type WorkspaceInfo struct {
 	Tokens    []AgentToken `json:"tokens,omitempty"`
 	Tabs      []TabInfo    `json:"tabs"`
 	ActiveTab uint64       `json:"active_tab,omitempty"`
+}
+
+// PanePasteParams is text for a pane, pasted.
+type PanePasteParams struct {
+	Pane uint64 `json:"pane"`
+	Text string `json:"text"`
 }
 
 // PaneTextParams asks for the text in a region of a pane.
@@ -639,6 +697,110 @@ type MCPWriteResult struct {
 	Warnings []string          `json:"warnings,omitempty"`
 }
 
+// PermListParams names the pane whose project the permissions are read
+// for, or a folder on the server's machine (`tend perm list -dir`); with
+// neither, only the agents' global files are read.
+type PermListParams struct {
+	Pane uint64 `json:"pane,omitempty"`
+	Dir  string `json:"dir,omitempty"`
+}
+
+// PermFile is one file an agent reads its permissions from.
+type PermFile struct {
+	Path     string `json:"path"`
+	Scope    string `json:"scope"`
+	Exists   bool   `json:"exists,omitempty"`
+	ReadOnly bool   `json:"read_only,omitempty"`
+	Note     string `json:"note,omitempty"`
+	// ModesOnly is a file with modes and no rules, not offered for one.
+	ModesOnly bool `json:"modes_only,omitempty"`
+}
+
+// PermRule is one rule in one file.
+type PermRule struct {
+	File      string `json:"file"`
+	Scope     string `json:"scope"`
+	Decision  string `json:"decision"`
+	Text      string `json:"text"`
+	ReadOnly  bool   `json:"read_only,omitempty"`
+	Why       string `json:"why,omitempty"`
+	Elsewhere bool   `json:"elsewhere,omitempty"`
+}
+
+// PermMode is one setting deciding how an agent asks at all.
+type PermMode struct {
+	File    string   `json:"file"`
+	Scope   string   `json:"scope"`
+	Key     string   `json:"key"`
+	Value   string   `json:"value,omitempty"`
+	Choices []string `json:"choices,omitempty"`
+	Help    string   `json:"help,omitempty"`
+}
+
+// PermAgent is one agent's permissions.
+type PermAgent struct {
+	ID        string     `json:"id"`
+	Name      string     `json:"name"`
+	Files     []PermFile `json:"files,omitempty"`
+	Rules     []PermRule `json:"rules,omitempty"`
+	Modes     []PermMode `json:"modes,omitempty"`
+	Decisions []string   `json:"decisions,omitempty"`
+	Warnings  []string   `json:"warnings,omitempty"`
+	Effect    string     `json:"effect,omitempty"`
+	Error     string     `json:"error,omitempty"`
+}
+
+// PermListResult is perm.list's answer: the project the pane is in (its
+// repository's root), the pane's folder, and every agent.
+type PermListResult struct {
+	Project string      `json:"project,omitempty"`
+	Dir     string      `json:"dir,omitempty"`
+	Agents  []PermAgent `json:"agents"`
+}
+
+// PermWriteParams is one write: a rule added, removed, given another
+// decision or moved to File To; or a mode (Key) set to Value, "" unsetting
+// it. A rule is named by its file, decision and text.
+type PermWriteParams struct {
+	Pane       uint64 `json:"pane,omitempty"`
+	Agent      string `json:"agent"`
+	File       string `json:"file"`
+	Decision   string `json:"decision,omitempty"`
+	Text       string `json:"text,omitempty"`
+	ToDecision string `json:"to_decision,omitempty"`
+	To         string `json:"to,omitempty"`
+	Key        string `json:"key,omitempty"`
+	Value      string `json:"value,omitempty"`
+}
+
+// PermEditor is an editor the server's machine has. A GUI one opens a
+// window of its own, and is offered only where there is a display.
+type PermEditor struct {
+	Name    string `json:"name"`
+	Command string `json:"command"`
+	GUI     bool   `json:"gui,omitempty"`
+	Default bool   `json:"default,omitempty"`
+}
+
+// PermEditorsResult is perm.editors' answer.
+type PermEditorsResult struct {
+	Editors []PermEditor `json:"editors"`
+}
+
+// PermOpenParams opens one of the agents' files in an editor, beside Pane;
+// an empty Editor is the default one.
+type PermOpenParams struct {
+	Pane   uint64 `json:"pane,omitempty"`
+	Path   string `json:"path"`
+	Editor string `json:"editor,omitempty"`
+}
+
+// PermOpenResult is where the file was opened: a new pane, or a window.
+type PermOpenResult struct {
+	Pane   uint64 `json:"pane,omitempty"`
+	Window bool   `json:"window,omitempty"`
+}
+
 // DirListParams names the folder to list; empty is the home folder of the
 // user the server runs as, and a leading ~ is that folder too.
 type DirListParams struct {
@@ -659,6 +821,10 @@ type GroupParams struct {
 	Group string `json:"group"`
 	Name  string `json:"name,omitempty"`
 	Dir   string `json:"dir,omitempty"`
+	// From and To are the companies group.move_company moves it between;
+	// From zero is every company it is in.
+	From uint64 `json:"from,omitempty"`
+	To   uint64 `json:"to,omitempty"`
 }
 
 // CompanyInfo is one company and its workspaces, in its order.
@@ -776,6 +942,12 @@ type AgentStatus struct {
 	Kind    string `json:"kind,omitempty"`
 	Running bool   `json:"running,omitempty"`
 	Next    string `json:"next,omitempty"`
+	// Args are what it is started with to be the agent (dsh --profile tui).
+	Args []string `json:"args,omitempty"`
+	// Detects reports that tend has rules to tell its states apart, which a
+	// pane started as it can be told to use; one without (Aider) is started
+	// unnamed, as naming an agent tend has no rules for is refused.
+	Detects bool `json:"detects,omitempty"`
 }
 
 // AgentSessionInfo is one conversation as agent_sessions.list finds it.
@@ -1191,6 +1363,13 @@ type PaneRenameParams struct {
 }
 
 // PaneFocusParams says which pane has the focus now and which had it.
+// PaneSleepResult is what putting a pane's agent to sleep did: the agent,
+// and the memory its processes held, in bytes.
+type PaneSleepResult struct {
+	Agent string `json:"agent,omitempty"`
+	Freed int64  `json:"freed,omitempty"`
+}
+
 type PaneFocusParams struct {
 	Pane uint64 `json:"pane"`
 	Lost uint64 `json:"lost,omitempty"`

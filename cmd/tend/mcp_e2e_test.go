@@ -53,6 +53,7 @@ func TestTheMCPManagerTestsAndSwitchesAServer(t *testing.T) {
 	t.Setenv("CURSOR_CONFIG_DIR", filepath.Join(home, ".cursor"))
 	t.Setenv("GEMINI_CLI_HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "xdg"))
+	t.Setenv("DSH_HOME", filepath.Join(home, ".dsh"))
 	claude := filepath.Join(home, ".claude.json")
 	if err := os.WriteFile(claude, []byte(`{"mcpServers": {"web": {"type": "http", "url": "`+srv.URL+`"}}}`), 0o600); err != nil {
 		t.Fatal(err)
@@ -109,6 +110,7 @@ func TestTheMCPManagerIsFoundAndUsedWithoutKeys(t *testing.T) {
 	t.Setenv("CURSOR_CONFIG_DIR", filepath.Join(home, ".cursor"))
 	t.Setenv("GEMINI_CLI_HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "xdg"))
+	t.Setenv("DSH_HOME", filepath.Join(home, ".dsh"))
 	if err := os.WriteFile(filepath.Join(home, ".claude.json"), []byte(`{"mcpServers": {"web": {"type": "http", "url": "`+srv.URL+`"}}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}

@@ -31,6 +31,7 @@ import (
 	"github.com/auth-com-br/tend/internal/agentsessions"
 	"github.com/auth-com-br/tend/internal/detect"
 	"github.com/auth-com-br/tend/internal/mcp"
+	"github.com/auth-com-br/tend/internal/perm"
 	"github.com/auth-com-br/tend/internal/policy"
 	"github.com/auth-com-br/tend/internal/proto"
 	"github.com/auth-com-br/tend/internal/pty"
@@ -198,6 +199,15 @@ type Config struct {
 	// Build is this binary's version, reported in the handshake so a client
 	// can say which two builds are talking.
 	Build string
+	// SleepRestored restores agents asleep (dormant.go): a shell where each
+	// was, woken in its conversation when a client focuses it. Off starts
+	// every agent back at once, as herdr does.
+	SleepRestored bool
+	// SleepAfter puts an agent to sleep once it has been idle that long with
+	// no client focused on it or showing it. Zero never does.
+	SleepAfter time.Duration
+	// SleepInterval is how often that is looked at. Zero picks a default.
+	SleepInterval time.Duration
 	// StateFile is where the session's arrangement is written, and read back
 	// from when a server starts. Empty means the session is not kept: it lives
 	// exactly as long as the process does.
@@ -299,6 +309,10 @@ type PaneSpec struct {
 	// NoDetect runs no agent detection in the pane: a popup, which herdr
 	// starts with detection disabled.
 	NoDetect bool
+
+	// restarted is a pane started again in place (an agent put to sleep):
+	// it is not announced as opened, since it never closed.
+	restarted bool
 }
 
 // PaneStatus is what a client needs to show about a pane.
@@ -324,6 +338,12 @@ type PaneStatus struct {
 	MouseDrag   bool
 	MouseMotion bool
 	MouseSGR    bool
+	// Dormant is the agent asleep in the pane (dormant.go), "" when none is.
+	Dormant string
+	// WheelKeys: the wheel is sent as arrow keys (vt.Screen.WheelKeys), in
+	// application form when AppCursor says the program asked for it.
+	WheelKeys bool
+	AppCursor bool
 	// Graphics changes whenever the pane's images or their placements do.
 	Graphics uint64
 }
@@ -342,6 +362,10 @@ type Server struct {
 	mcpOnce sync.Once
 	mcp     *mcp.Manager
 	mcpErr  error
+	// permOnce makes perm, the permissions manager (perm.go), on first use.
+	permOnce sync.Once
+	perm     *perm.Manager
+	permErr  error
 
 	mu       sync.Mutex
 	session  *session.Session
@@ -489,6 +513,10 @@ func (s *Server) startLoops() {
 		s.wg.Add(1)
 		go s.activityLoop()
 	}
+	// Always running, so a reload that turns sleeping on needs no restart;
+	// with SleepAfter zero it looks at nothing.
+	s.wg.Add(1)
+	go s.sleepLoop()
 }
 
 // Close stops every pane and ends every subscription.
@@ -927,7 +955,11 @@ func (s *Server) startLocked(id session.PaneID, spec PaneSpec) error {
 	s.wg.Add(1)
 	go s.readPane(rt)
 
-	s.publish(Event{Kind: EventPaneOpened, Pane: id})
+	if spec.restarted {
+		s.publish(Event{Kind: EventPaneState, Pane: id})
+	} else {
+		s.publish(Event{Kind: EventPaneOpened, Pane: id})
+	}
 	return nil
 }
 
@@ -1377,6 +1409,13 @@ func (s *Server) adoptOnce() {
 		manifest, err := agent.ResolveManifest(catalog, "", name)
 		if err != nil {
 			continue
+		}
+		if manifest == nil && agent.IsRuntimeOrShell(name) {
+			// node, python or a shell running an agent's script — the
+			// DeepSeek Harness is `node …/bin/dsh` — as herdr reads it.
+			if wrapped := agent.WrappedAgentName(name, rt.pty.ForegroundArgv()); wrapped != "" {
+				manifest, _ = agent.ResolveManifest(catalog, "", wrapped)
+			}
 		}
 		if manifest == nil {
 			// The foreground is something with no rules — a shell, a pager, a

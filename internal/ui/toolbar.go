@@ -19,6 +19,7 @@ const (
 	ToolFiles    = "files"
 	ToolAgents   = "agents"
 	ToolMCP      = "mcp"
+	ToolPerms    = "permissions"
 	ToolSessions = "sessions"
 	ToolIssues   = "issues"
 	ToolErrors   = "errors"
@@ -45,6 +46,7 @@ var toolIcons = map[string][3]string{
 	ToolFiles:    {"\uf07b", "📁", "F"},
 	ToolAgents:   {"\uee0d", "🤖", "A"},
 	ToolMCP:      {"\uf1e6", "🔌", "M"},
+	ToolPerms:    {"\uf132", "🛡", "P"},
 	ToolSessions: {"\uf1da", "🕘", "S"},
 	ToolIssues:   {"\uf09b", "🐙", "I"},
 	ToolErrors:   {"\uf188", "🐞", "E"},

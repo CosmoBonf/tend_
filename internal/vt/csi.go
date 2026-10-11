@@ -342,6 +342,8 @@ func (s *Screen) setPrivateModes(ps *Params, set bool) {
 				s.cur = s.saved
 				s.clampCursor()
 			}
+		case 1007:
+			s.modes.AlternateScroll = set
 		case 2004:
 			s.modes.BracketedPaste = set
 		case 2026:

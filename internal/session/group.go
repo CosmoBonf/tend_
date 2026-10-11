@@ -150,6 +150,59 @@ func (s *Session) RemoveGroup(name string) error {
 	return nil
 }
 
+// MoveGroupToCompany moves a group, with its spaces, from one company to
+// another: each of its spaces leaves `from` and joins `to`, and the group
+// is listed under `to` and no longer under `from`. With from zero the group
+// leaves every company it is in for `to` alone — what moving it means when
+// no company is being looked at. A space that is also in a company the
+// move is not about stays in it: membership is many-to-many, and a move
+// from one company says nothing about another.
+func (s *Session) MoveGroupToCompany(group string, from, to CompanyID) error {
+	g, ok := s.Group(group)
+	if !ok {
+		return fmt.Errorf("%w: %q", ErrNoSuchGroup, group)
+	}
+	if _, ok := s.Company(to); !ok {
+		return fmt.Errorf("%w: %d", ErrNoSuchCompany, to)
+	}
+	if from != 0 {
+		if _, ok := s.Company(from); !ok {
+			return fmt.Errorf("%w: %d", ErrNoSuchCompany, from)
+		}
+	}
+	if from == to {
+		return nil
+	}
+	for _, w := range s.workspaces {
+		if w.Group != group {
+			continue
+		}
+		leaving := []CompanyID{from}
+		if from == 0 {
+			leaving = s.CompaniesOf(w.ID)
+		}
+		for _, c := range leaving {
+			if c != to {
+				if err := s.UnassignCompany(c, w.ID); err != nil {
+					return err
+				}
+			}
+		}
+		if err := s.AssignCompany(to, w.ID); err != nil {
+			return err
+		}
+	}
+	// The group's own list: an empty group moves too, and one that had a
+	// space of `from` once must stop being listed there.
+	g.Companies = slices.DeleteFunc(g.Companies, func(c CompanyID) bool {
+		return c != to && (from == 0 || c == from)
+	})
+	if !slices.Contains(g.Companies, to) {
+		g.Companies = append(g.Companies, to)
+	}
+	return nil
+}
+
 // forgetCompanyInGroups takes a deleted company out of every group.
 func (s *Session) forgetCompanyInGroups(id CompanyID) {
 	for _, g := range s.groups {

@@ -71,3 +71,57 @@ func companiesEqual(a, b []proto.CompanyInfo) bool {
 		return x.ID == y.ID && x.Name == y.Name && slices.Equal(x.Workspaces, y.Workspaces)
 	})
 }
+
+// TestAGroupMovesToAnotherCompanyOverTheProtocol: group.move_company moves
+// a group's spaces from one company to the other, every client is sent the
+// result, and it lasts a restart. If it regresses, the menu's "move to
+// company" does nothing, or the move is undone when the server restarts.
+func TestAGroupMovesToAnotherCompanyOverTheProtocol(t *testing.T) {
+	state := filepath.Join(t.TempDir(), "work.json")
+	first := persistentServer(t, state)
+	a, err := first.NewWorkspaceIn("a", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := first.NewWorkspaceIn("b", t.TempDir())
+	for _, ws := range []session.WorkspaceID{a, b} {
+		if _, _, err := first.NewTab(ws, "t", PaneSpec{Command: []string{"/bin/sh"}}); err != nil {
+			t.Fatal(err)
+		}
+		if err := first.GroupWorkspace(ws, "client"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	res, _ := first.Company(proto.MethodCompanyCreate, proto.CompanyParams{Name: "Acme", Workspace: uint64(a)})
+	acme := res.(proto.CompanyCreateResult).Company
+	if _, err := first.Company(proto.MethodCompanyAssign, proto.CompanyParams{Company: acme, Workspace: uint64(b)}); err != nil {
+		t.Fatal(err)
+	}
+	res, _ = first.Company(proto.MethodCompanyCreate, proto.CompanyParams{Name: "Auth"})
+	auth := res.(proto.CompanyCreateResult).Company
+
+	if err := first.Group(proto.MethodGroupMoveCompany, proto.GroupParams{Group: "client", From: acme, To: auth}); err != nil {
+		t.Fatal(err)
+	}
+	want := []proto.CompanyInfo{
+		{ID: acme, Name: "Acme"},
+		{ID: auth, Name: "Auth", Workspaces: []uint64{uint64(a), uint64(b)}},
+	}
+	if got := first.Snapshot().Companies; !companiesEqual(got, want) {
+		t.Errorf("companies = %+v, want %+v", got, want)
+	}
+
+	first.saveStructure()
+	if err := first.Close(); err != nil {
+		t.Fatal(err)
+	}
+	second := persistentServer(t, state)
+	if got := second.Snapshot().Companies; !companiesEqual(got, want) {
+		t.Errorf("after a restart companies = %+v, want %+v", got, want)
+	}
+	for _, g := range second.Snapshot().Groups {
+		if g.Name == "client" && !slices.Equal(g.Companies, []uint64{auth}) {
+			t.Errorf("the group is listed under %v, want Auth only", g.Companies)
+		}
+	}
+}

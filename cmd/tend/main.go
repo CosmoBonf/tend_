@@ -37,6 +37,9 @@ commands:
   context           add to, list or clear what the agents are to be handed
   gitlab            keep a token for a GitLab, for its issues and merge requests
   mcp               the agents' MCP servers: list them, test them (prefix+M manages them)
+  perm              what the agents may do without asking (prefix+P manages it)
+  web               the session's agents on a phone: watch and message them
+  gui-bridge        a session for the desktop app, as JSON lines on stdin and stdout
   browser           the session's browsers: status, open, select, attach
   terminal          set or clear the outer window's title
   layout            save a tab's arrangement, or build it again
@@ -162,6 +165,12 @@ func main() {
 		err = runGitLab(args[1:])
 	case "mcp":
 		err = runMCP(args[1:])
+	case "perm":
+		err = runPerm(args[1:])
+	case "web":
+		err = runWeb(args[1:])
+	case "gui-bridge":
+		err = runGUIBridge(args[1:])
 	case "browser":
 		err = runBrowser(args[1:])
 	case "terminal":

@@ -877,6 +877,8 @@ func StatusIcon(state string, running, symbols bool) string {
 		return "●"
 	case "idle":
 		return "○"
+	case "asleep":
+		return "z"
 	}
 	return "·"
 }
