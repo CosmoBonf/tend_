@@ -367,6 +367,59 @@ make install     # into GOBIN, or ~/.local/bin
 make dist        # cross-compiled binaries for linux and macOS
 ```
 
+### install and update from this repository
+
+The same on Linux and macOS (on Windows, inside WSL, as Linux).
+
+**Install, the first time.** Go 1.27.1 goes in `~/.local/go`, where the
+Makefile looks for it — one line, for your machine:
+
+```bash
+mkdir -p ~/.local
+curl -fsSL https://go.dev/dl/go1.27.1.darwin-arm64.tar.gz | tar -C ~/.local -xz   # Mac, Apple Silicon
+curl -fsSL https://go.dev/dl/go1.27.1.darwin-amd64.tar.gz | tar -C ~/.local -xz   # Mac, Intel
+curl -fsSL https://go.dev/dl/go1.27.1.linux-amd64.tar.gz  | tar -C ~/.local -xz   # Linux, x86_64
+curl -fsSL https://go.dev/dl/go1.27.1.linux-arm64.tar.gz  | tar -C ~/.local -xz   # Linux, ARM
+```
+
+Then the repository, built and installed into `~/.local/bin`:
+
+```bash
+git clone git@github.com:CosmoBonf/tend_.git ~/cfdev/tend_
+cd ~/cfdev/tend_
+make install INSTALL_DIR=$HOME/.local/bin
+```
+
+If `tend` is not found after that, put `~/.local/bin` on your PATH:
+
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc     # Mac (zsh)
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc   # Linux (bash)
+```
+
+`tend version` says it is there; `tend` opens it. Linux needs `git` and
+`make` (`sudo apt install git make`); on a Mac they come with
+`xcode-select --install`.
+
+**Update, each time there are changes:**
+
+```bash
+cd ~/cfdev/tend_
+git pull
+make install INSTALL_DIR=$HOME/.local/bin
+tend handoff
+```
+
+`tend handoff` moves the session onto the new server and keeps what is
+running in the panes. Then leave the client (`ctrl+b d`) and run `tend`
+again, for the new client too.
+
+Do not use `tend update` on a build of this repository: it installs the
+published release, which does not have what is here, over it. For the same
+reason the "update ready" notice is about that release; `[update]
+version_check = false` in the settings file (`tend config` shows where it
+is) turns it off.
+
 ## development
 
 ```bash
