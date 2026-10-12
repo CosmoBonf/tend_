@@ -5,6 +5,13 @@ release's notes on GitHub and what "what's new" shows inside tend.
 
 ## Unreleased
 
+## v0.16.0 — 2026-10-12
+
+#### New
+- **tend in your application launcher.** `tend shortcut` puts tend among your desktop's applications, with its icon: click it and a terminal opens with your session, as any other program opens. `tend shortcut -s work` makes the shortcut open that session, and `tend shortcut -remove` takes it out. Linux desktops (GNOME, KDE, COSMIC, Xfce and the rest).
+- **An icon for tend.** Three panes, each with its state, and the lines between them drawing a T. It is the icon of the launcher shortcut and of the phone page (`tend web`), on the tab and on the home screen.
+- **A shorter README.** The keys and the tools are tables now, one line each, and the detail of every tool has its own page, `docs/TOOLS.md`.
+
 ## v0.15.0 — 2026-10-11
 
 #### New
