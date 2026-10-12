@@ -503,7 +503,7 @@ pane subscription for the screen of the one shown, paste and input for a message
   answered and counts toward the same limit. "sign out" unpairs one phone.
 - **What a phone can do** is a fixed list — a message, one of the keys an agent
   asks for, wake, sleep — on a pane that is an agent's. There is no passthrough of
-  the session's methods (unlike `tend gui-bridge`), and no shell. Actions are JSON
+  the session's methods, and no shell. Actions are JSON
   from the page's own origin.
 - **The screen** is drawn on the computer: each frame the session sends (the whole
   screen, as ANSI) goes through a `vt.Screen` and comes out as HTML spans, at most

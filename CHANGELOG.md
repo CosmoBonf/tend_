@@ -5,6 +5,9 @@ release's notes on GitHub and what "what's new" shows inside tend.
 
 ## Unreleased
 
+#### Removed
+- **`tend gui-bridge` and the desktop app experiment.** The Neutralino window on a session was a proof of concept that is not being taken further; the command that served it is gone with it. Nothing else used it.
+
 ## v0.16.0 — 2026-10-12
 
 #### New
