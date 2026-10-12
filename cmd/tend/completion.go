@@ -24,6 +24,7 @@ var commands = []struct{ name, help string }{
 	{"mcp", "the agents' MCP servers: list them, test them"},
 	{"perm", "what the agents may do without asking: list it"},
 	{"web", "the session's agents on a phone: watch and message them"},
+	{"shortcut", "put tend in the desktop's application launcher"},
 	{"gui-bridge", "a session for the desktop app, as JSON lines"},
 	{"browser", "the session's browsers: status, open, select, attach"},
 	{"terminal", "set or clear the outer window's title"},
