@@ -769,8 +769,9 @@ func drawSwitch(dst *vt.Grid, r SidebarRow, y, limit int, theme Theme) {
 }
 
 // drawSSHEntry is a saved connection: a mark that is filled while it is open
-// in a space, its name, and where it goes beneath, as a space shows its
-// branch. Running is "open"; Active is the space in view being this one.
+// in a space, and its name — the ssh list no longer gives it a Detail, so the
+// user and host stay off the screen. Running is "open"; Active is the space
+// in view being this one; Selected is the connection a first click picked.
 func drawSSHEntry(dst *vt.Grid, r SidebarRow, y, limit int, theme Theme) {
 	cursor := " "
 	if r.Selected {
@@ -780,6 +781,13 @@ func drawSSHEntry(dst *vt.Grid, r SidebarRow, y, limit int, theme Theme) {
 	mark, glyph := theme.SidebarDetail, " ○ "
 	if r.Running {
 		mark, glyph = theme.Idle, " ● "
+	}
+	if r.Selected && !r.Active && theme.SidebarCursor != (vt.Style{}) {
+		// Picked by a first click, which a second one opens: shown as the
+		// navigation cursor is, so it is plain which one that second click
+		// will open.
+		style = theme.SidebarCursor
+		fill(dst, y, 0, limit, style)
 	}
 	if r.Active {
 		style = theme.SidebarSelected

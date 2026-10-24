@@ -12,9 +12,14 @@ import (
 
 // The SSH list, tend's own, after Ásbrú Connection Manager: the button
 // beside the sidebar's "menu" turns the top list from the spaces to the
-// saved SSH connections and back. A click on a connection opens it, logged
-// in, in a space of its own — or goes to it, when it is open already; a
-// right-click edits, duplicates, copies or deletes it; "new" adds one.
+// saved SSH connections and back. A click on a connection picks it, and a
+// second click on the one picked opens it, logged in, in a space of its own —
+// or goes to it, when it is open already; a right-click edits, duplicates,
+// copies or deletes it; "new" adds one.
+//
+// The list shows each connection by its name alone. The user and host are
+// the owner's to keep off a screen that is shared or recorded, so they stay
+// in the form and the ssh command, and out of the list and the tab.
 //
 // The connections are kept in a file of their own beside the settings
 // (internal/sshconn), read by this client. Which list is shown, which groups
@@ -40,6 +45,10 @@ type sshState struct {
 	// open is where each connection opened from here is: its space and the
 	// pane ssh runs in, whose end closes the space.
 	open map[string]sshOpen
+	// picked is the connection the last click picked. Only a click on the
+	// connection already picked opens it: the owner asked that a single
+	// click, easily made by mistake, log in nowhere.
+	picked string
 	// drag is the connection pressed on, until the button comes up; moved
 	// is whether the pointer left it, which makes the press a drag rather
 	// than a click. dropOn is the row it would be dropped on ("group:name"
@@ -132,13 +141,13 @@ func (t *tui) sshSectionLocked() ui.SidebarSection {
 		return ui.SidebarRow{
 			Kind:     ui.SidebarSSH,
 			Label:    c.Name,
-			Detail:   c.Target(),
 			SSH:      c.ID,
 			Group:    c.Group,
 			Action:   ui.ActionSSHConnect,
 			Running:  open,
 			Active:   open && o.workspace == t.workspace,
 			Depth:    depth,
+			Selected: t.ssh.picked == c.ID,
 			DropHere: t.ssh.dropOn == "conn:"+c.ID,
 		}
 	}
@@ -243,20 +252,32 @@ func (t *tui) dragSSH(ev ui.MouseEvent) bool {
 	return true
 }
 
-// dropSSH ends a press on a connection: a click opens it, a drag onto a
-// group files it there, and a drag onto nothing does nothing. It reports
-// whether there was one.
+// dropSSH ends a press on a connection: a click picks it, a click on the
+// one picked opens it, a drag onto a group files it there, and a drag onto
+// nothing does nothing. It reports whether there was one.
 func (t *tui) dropSSH() (bool, error) {
 	t.mu.Lock()
 	id, moved, on, group := t.ssh.drag, t.ssh.moved, t.ssh.dropOn, t.ssh.dropGroup
 	t.ssh.drag, t.ssh.moved, t.ssh.dropOn, t.ssh.dropGroup = "", false, "", ""
 	t.dirty = true
+	second := !moved && id != "" && t.ssh.picked == id
+	if !moved && id != "" {
+		t.ssh.picked = id
+	}
+	if second {
+		// Picked again after it opens: a click on it once its space closes
+		// picks it, rather than reconnecting at once.
+		t.ssh.picked = ""
+	}
 	t.mu.Unlock()
 	switch {
 	case id == "":
 		return false, nil
-	case !moved:
+	case second:
 		return true, t.connectSSH(id)
+	case !moved:
+		t.wakeUp()
+		return true, nil
 	case on != "":
 		t.moveSSH(id, group)
 	}
@@ -309,7 +330,7 @@ func (t *tui) connectSSH(id string) error {
 		_ = t.client.CloseWorkspace(ws)
 		return err
 	}
-	tab, pane, err := t.client.NewTab(ws, c.Target(), proto.PaneSpec{
+	tab, pane, err := t.client.NewTab(ws, c.Name, proto.PaneSpec{
 		Command: c.PaneCommand(),
 		Title:   c.Name,
 	})

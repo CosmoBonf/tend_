@@ -817,7 +817,8 @@ func (t *tui) clickSidebar(x, y int) (bool, error) {
 		t.openMenu(ui.SSHNewMenu(x, y))
 		return true, nil
 	case row.Action == ui.ActionSSHConnect:
-		// Opened when the button comes up, unless it was dragged to a group.
+		// Picked, or opened when it was picked already, when the button
+		// comes up, unless it was dragged to a group.
 		t.pressSSH(row.SSH)
 		return true, nil
 	case row.Action == ui.ActionSSHToggleGroup:

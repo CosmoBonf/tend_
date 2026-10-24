@@ -17,11 +17,13 @@ import (
 
 // TestAnSSHConnectionIsSavedOpenedLoggedInAndClosed is the SSH list from end
 // to end: the button beside "menu" shows the connections, "new" saves one
-// with a password, a click opens it in a space of its own with ssh given the
-// password by tend, q at "connect again" closes the space, and delete
+// with a password and lists it by its name alone, a first click picks it
+// without connecting, a second opens it in a space of its own with ssh given
+// the password by tend, q at "connect again" closes the space, and delete
 // forgets it. ssh here is a stand-in that asks SSH_ASKPASS as the real one
 // does and prints what it was told. If it regresses, the saved connections
-// are a list that does not log anybody in.
+// are a list that does not log anybody in, one that shows the user and host
+// on a screen the owner shares, or one that logs in on a stray click.
 func TestAnSSHConnectionIsSavedOpenedLoggedInAndClosed(t *testing.T) {
 	bin, store := t.TempDir(), filepath.Join(t.TempDir(), "ssh.toml")
 	fake := `#!/bin/sh
@@ -54,13 +56,21 @@ echo "FAKE SSH $* PASSWORD:$pw"
 	a.send(t, "old.box\t2222\troot\thunter2\r")
 	a.waitForScreen(t, "the connection listed", func(string) bool {
 		side := a.sidebarText()
-		return strings.Contains(side, "old.box") && strings.Contains(side, "root@old.box:2222")
+		return strings.Contains(side, "○ old.box")
 	})
+	if side := a.sidebarText(); strings.Contains(side, "root@") || strings.Contains(side, "2222") {
+		t.Errorf("the list shows the user or the port, not the name alone:\n%s", side)
+	}
 	info, err := os.Stat(store)
 	if err != nil || info.Mode().Perm() != 0o600 {
 		t.Fatalf("the connections file is %v, %v; want 0600", info, err)
 	}
 
+	a.clickAt(t, 5, a.lineContaining(t, "○ old.box"))
+	a.waitForScreen(t, "old.box picked", func(string) bool { return strings.Contains(a.sidebarText(), "› ○ old.box") })
+	if s := a.text(); strings.Contains(s, "FAKE SSH") || strings.Contains(a.sidebarText(), "● old.box") {
+		t.Fatalf("a single click connected:\n%s", s)
+	}
 	a.clickAt(t, 5, a.lineContaining(t, "○ old.box"))
 	a.waitForScreen(t, "ssh logged in by tend", func(s string) bool {
 		return strings.Contains(s, "FAKE SSH -p 2222 -l root") && strings.Contains(s, "PASSWORD:hunter2") &&
@@ -284,9 +294,12 @@ func TestAConnectionIsDraggedIntoAGroup(t *testing.T) {
 		return strings.Contains(side, "  ○ vps") && !strings.Contains(side, "    ○ vps")
 	})
 
-	// A press that drifts to the line under the name is still a click.
+	// A press that drifts along the name is still a click: the first picks
+	// db, the second opens it.
 	dy := a.lineContaining(t, "○ db")
-	a.dragFromTo(t, 0, 5, dy, 9, dy+1)
+	a.clickAt(t, 5, dy)
+	a.waitForScreen(t, "db picked", func(string) bool { return strings.Contains(a.sidebarText(), "› ○ db") })
+	a.dragFromTo(t, 0, 5, dy, 9, dy)
 	a.waitForScreen(t, "db opened", func(s string) bool { return strings.Contains(s, "FAKE SSH -- db.example") })
 
 	back, err := sshconn.Load(store)
@@ -323,6 +336,7 @@ func TestTheSpacesListLeavesTheConnectionsOut(t *testing.T) {
 	y := a.lineContaining(t, "⇄ ssh")
 	a.clickAt(t, columnOfString(a.lines()[y-1], "⇄ ssh")+2, y)
 	a.waitForScreen(t, "the list", func(string) bool { return strings.Contains(a.sidebarText(), "○ box") })
+	a.clickAt(t, 5, a.lineContaining(t, "○ box"))
 	a.clickAt(t, 5, a.lineContaining(t, "○ box"))
 	a.waitForScreen(t, "connected", func(s string) bool { return strings.Contains(s, "FAKE SSH") })
 

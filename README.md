@@ -215,9 +215,10 @@ instead.
 your saved SSH connections, in groups; `⇄ dev` turns it back. `new` makes a
 group (a folder, empty until you put connections in it) or a connection:
 a name, a group, the host, port and user, and a password for a machine that
-takes no key (leave it empty and ssh uses your keys as always). A click opens
-the connection logged in, in a space of its own — or goes to it when it is
-open, marked `●`. When ssh ends, enter connects again and `q` closes the
+takes no key (leave it empty and ssh uses your keys as always). The list
+shows each connection by its name alone. A click picks a connection; a
+second click on it opens it logged in, in a space of its own — or goes to
+it when it is open, marked `●`. When ssh ends, enter connects again and `q` closes the
 space. Right-click a connection to edit, move it to another group,
 duplicate, copy its ssh command or delete it; right-click a group for a new
 connection in it, or to rename or delete it (its connections are kept). In the form, the group field offers the groups there are:
