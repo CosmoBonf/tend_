@@ -40,10 +40,15 @@ type Modes struct {
 	ReverseVideo   bool // DECSCNM (5)
 	ApplicationCur bool // DECCKM (1), changes what arrow keys send
 	BracketedPaste bool // 2004
-	FocusEvents    bool // 1004
-	SyncOutput     bool // 2026
-	Mouse          MouseMode
-	MouseEncoding  MouseEncoding
+	// AlternateScroll (1007): on the alternate screen, with no mouse
+	// reporting, the wheel is sent as the arrow keys — how a full-screen
+	// program that does not take the mouse is scrolled by it. On by default,
+	// as in herdr (ghostty) and most terminals; a program may turn it off.
+	AlternateScroll bool
+	FocusEvents     bool // 1004
+	SyncOutput      bool // 2026
+	Mouse           MouseMode
+	MouseEncoding   MouseEncoding
 }
 
 // Cursor is the caret and the style new text takes.
@@ -128,8 +133,9 @@ func NewScreen(cols, rows, scrollback int) *Screen {
 		main: NewGrid(cols, rows, scrollback),
 		alt:  NewGrid(cols, rows, 0),
 		modes: Modes{
-			AutoWrap:      true,
-			CursorVisible: true,
+			AutoWrap:        true,
+			CursorVisible:   true,
+			AlternateScroll: true,
 		},
 		top:    0,
 		bottom: rows - 1,
@@ -161,6 +167,13 @@ func (s *Screen) Modes() Modes { return s.modes }
 
 // IsAlt reports whether the alternate screen is displayed.
 func (s *Screen) IsAlt() bool { return s.onAlt }
+
+// WheelKeys reports whether the wheel over this screen should be sent as
+// arrow keys: herdr's WheelRouting::AlternateScroll — the alternate screen,
+// mode 1007 on, and no mouse reporting, which would take the wheel itself.
+func (s *Screen) WheelKeys() bool {
+	return s.onAlt && s.modes.AlternateScroll && s.modes.Mouse == MouseOff
+}
 
 // Title returns the last title set via OSC 0 or OSC 2.
 func (s *Screen) Title() string { return s.title }
@@ -534,7 +547,7 @@ func (s *Screen) decaln() {
 func (s *Screen) Reset() {
 	s.cur = Cursor{}
 	s.saved = Cursor{}
-	s.modes = Modes{AutoWrap: true, CursorVisible: true}
+	s.modes = Modes{AutoWrap: true, CursorVisible: true, AlternateScroll: true}
 	s.top, s.bottom = 0, s.rows-1
 	s.onAlt = false
 	s.grid = s.main

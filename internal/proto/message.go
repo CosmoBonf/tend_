@@ -304,6 +304,9 @@ const (
 	// FeatureMouseDetail: the snapshot says how much mouse a pane asked for
 	// and in which encoding.
 	FeatureMouseDetail = "mouse-detail"
+	// FeatureWheelKeys: the snapshot says when the wheel over a pane is to
+	// be sent as arrow keys (alternate scroll).
+	FeatureWheelKeys = "wheel-keys"
 	// FeatureSessionChanged: the server says when panes are swapped, and tabs
 	// or spaces moved, renamed or regrouped.
 	FeatureSessionChanged = "session-changed"
@@ -363,7 +366,7 @@ var KnownFeatures = []string{
 	FeatureLifecycle, FeatureWindowTitle, FeatureTabBarStatus, FeatureDone, FeatureWindowFocus,
 	FeatureFocusRequest, FeatureAgentView, FeatureServerShell, FeaturePopup, FeatureUpdate,
 	FeatureDockUnless, FeatureContext, FeatureContextArrived, FeatureFollowCwd, FeatureGitHubFolders,
-	FeatureGroups,
+	FeatureGroups, FeatureWheelKeys,
 }
 
 // --- session ---------------------------------------------------------------
@@ -391,6 +394,12 @@ type PaneInfo struct {
 	MouseDrag   bool `json:"mouse_drag,omitempty"`
 	MouseMotion bool `json:"mouse_motion,omitempty"`
 	MouseSGR    bool `json:"mouse_sgr,omitempty"`
+	// WheelKeys: the wheel over the pane is sent as arrow keys — a
+	// full-screen program on the alternate screen that does not take the
+	// mouse (mode 1007, herdr's alternate scroll) — in application form
+	// when AppCursor is set.
+	WheelKeys bool `json:"wheel_keys,omitempty"`
+	AppCursor bool `json:"app_cursor,omitempty"`
 	// Graphics changes whenever a pane's images or their placements do, so a
 	// client can tell whether to ask for them again.
 	Graphics uint64 `json:"graphics,omitempty"`

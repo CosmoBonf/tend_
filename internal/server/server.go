@@ -324,6 +324,12 @@ type PaneStatus struct {
 	MouseDrag   bool
 	MouseMotion bool
 	MouseSGR    bool
+	// WheelKeys and AppCursor say the wheel over the pane is to be sent as
+	// arrow keys (alternate scroll), in application form when AppCursor is
+	// set: a full-screen program on the alternate screen that did not take
+	// the mouse scrolls by the arrow keys herdr would send it.
+	WheelKeys bool
+	AppCursor bool
 	// Graphics changes whenever the pane's images or their placements do.
 	Graphics uint64
 }

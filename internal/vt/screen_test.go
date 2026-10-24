@@ -731,3 +731,30 @@ func TestHyperlinkTableIsBounded(t *testing.T) {
 		t.Errorf("%d links kept", len(s.links))
 	}
 }
+
+// TestTheWheelIsArrowsOnTheAlternateScreenWithoutTheMouse: herdr's
+// alternate scroll — mode 1007, on by default — makes the wheel arrow keys
+// for a program on the alternate screen that did not ask for the mouse,
+// and only for it. If it regresses, the wheel over a full-screen TUI that
+// draws in place (the dsh TUI, a pager) scrolls nothing it drew.
+func TestTheWheelIsArrowsOnTheAlternateScreenWithoutTheMouse(t *testing.T) {
+	s := newScreen(t, 10, 3, 10, "")
+	if !s.Modes().AlternateScroll {
+		t.Fatal("1007 is off by default")
+	}
+	if s.WheelKeys() {
+		t.Error("arrows on the main screen")
+	}
+	_, _ = s.Write([]byte("\x1b[?1049h"))
+	if !s.WheelKeys() {
+		t.Error("no arrows on the alternate screen")
+	}
+	_, _ = s.Write([]byte("\x1b[?1000h"))
+	if s.WheelKeys() {
+		t.Error("arrows for a program that takes the mouse")
+	}
+	_, _ = s.Write([]byte("\x1b[?1000l\x1b[?1007l"))
+	if s.WheelKeys() {
+		t.Error("arrows with 1007 turned off")
+	}
+}

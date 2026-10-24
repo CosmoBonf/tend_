@@ -56,8 +56,13 @@ type paneRuntime struct {
 	// mouse is the last reported state of the pane program's mouse reporting.
 	// Whether a click belongs to the pane or to the client turns on it, so a
 	// client holding a stale answer sends the wheel to the wrong place.
-	mouse   bool
-	running bool
+	mouse bool
+	// wheelKeys and appCursor are what the client was last told about the
+	// wheel, so a change is told. The wheel turns into arrow keys when a
+	// program opens the alternate screen without taking the mouse, and the
+	// form of those keys changes with the application cursor mode.
+	wheelKeys, appCursor bool
+	running              bool
 	// closeOnExit closes the pane when its program ends, for a pane opened to
 	// run one thing — a user's command, the scrollback editor — whose frame
 	// would otherwise sit there saying "exited" until closed by hand. Set
@@ -221,6 +226,12 @@ func (rt *paneRuntime) poll(lastTitle string) observation {
 		rt.mouse = mouse
 		obs.mouseChanged = true
 	}
+	// What the wheel does changes with the alternate screen too: a pager or
+	// a full-screen agent opening is when the wheel starts meaning arrows.
+	if keys, app := rt.screen.WheelKeys(), rt.screen.Modes().ApplicationCur; keys != rt.wheelKeys || app != rt.appCursor {
+		rt.wheelKeys, rt.appCursor = keys, app
+		obs.mouseChanged = true
+	}
 	if rt.dirty && rt.detector != nil {
 		rt.dirty = false
 		res, _ := rt.detector.Update(rt.screen)
@@ -327,6 +338,8 @@ func (rt *paneRuntime) status() PaneStatus {
 		MouseDrag:    modes.Mouse >= vt.MouseButtonEvent,
 		MouseMotion:  modes.Mouse >= vt.MouseAnyEvent,
 		MouseSGR:     modes.MouseEncoding == vt.MouseEncodingSGR || modes.MouseEncoding == vt.MouseEncodingSGRPixels,
+		WheelKeys:    rt.screen.WheelKeys(),
+		AppCursor:    modes.ApplicationCur,
 		Graphics:     rt.screen.KittyRevision(),
 		ID:           rt.id,
 		Title:        rt.title,

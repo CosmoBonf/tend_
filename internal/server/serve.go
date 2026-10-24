@@ -1097,6 +1097,8 @@ func (s *Server) snapshot() proto.SessionSnapshot {
 		snap.Panes[i].MouseDrag = st.MouseDrag
 		snap.Panes[i].MouseMotion = st.MouseMotion
 		snap.Panes[i].MouseSGR = st.MouseSGR
+		snap.Panes[i].WheelKeys = st.WheelKeys
+		snap.Panes[i].AppCursor = st.AppCursor
 		snap.Panes[i].Graphics = st.Graphics
 		snap.Panes[i].Display = st.Presentation.DisplayAgent
 		snap.Panes[i].StateLabels = st.Presentation.StateLabels

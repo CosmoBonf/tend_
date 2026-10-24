@@ -1964,6 +1964,24 @@ func TestAttachWheelReachesAProgramThatAskedForIt(t *testing.T) {
 	}
 }
 
+// TestTheWheelOverAFullScreenProgramIsArrowKeys: a program on the
+// alternate screen that does not take the mouse gets the wheel as the
+// arrow keys, as herdr sends it. If it regresses, the wheel over the dsh
+// TUI or a pager opens tend's scrollback instead, where nothing the program
+// drew is.
+func TestTheWheelOverAFullScreenProgramIsArrowKeys(t *testing.T) {
+	a := startSession(t, 100, 16)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.send(t, "printf '\\033[?1049h'; cat -v\r")
+	a.waitForScreen(t, "the alternate screen", func(s string) bool { return !strings.Contains(s, "cat -v") })
+	// The snapshot learns the pane's modes on the next poll.
+	a.sendUntil(t, "\x1b[<64;50;8M", "an arrow up from the wheel", func(s string) bool {
+		return strings.Contains(s, "^[[A")
+	})
+	a.wheelAt(t, 50, 8, false)
+	a.waitForScreen(t, "an arrow down from the wheel", func(s string) bool { return strings.Contains(s, "^[[B") })
+}
+
 // TestAttachOffersToRestartAnOlderServer: the server outlives the client, so
 // upgrading tend and reattaching leaves the old one running. A notice naming a
 // command to run in another terminal is one step further than most people go
