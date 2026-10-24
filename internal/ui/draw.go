@@ -457,6 +457,8 @@ type Frame struct {
 	Toast *Toast
 	// WorktreeOpen is herdr's open-worktree popup, when it is up.
 	WorktreeOpen *WorktreeOpen
+	// SideBySide is the "side by side..." popup, when it is up.
+	SideBySide *SideBySide
 	// FolderPick is the folder picker, when it is up.
 	FolderPick *FolderPick
 
@@ -682,6 +684,9 @@ func Draw(dst *vt.Grid, f Frame, theme Theme) {
 	if f.FolderPick != nil {
 		drawFolderPick(dst, *f.FolderPick, theme)
 	}
+	if f.SideBySide != nil {
+		drawSideBySide(dst, *f.SideBySide, theme)
+	}
 	if f.SSHForm != nil {
 		drawSSHForm(dst, f.SSHForm, theme)
 	}
@@ -906,6 +911,9 @@ func CursorPosition(f Frame, cols, rows int) (x, y int, visible bool) {
 	}
 	if f.WorktreeOpen != nil {
 		return WorktreeOpenCursor(*f.WorktreeOpen, cols, rows)
+	}
+	if f.SideBySide != nil {
+		return SideBySideCursor(*f.SideBySide, cols, rows)
 	}
 	if c := f.CopyCursor; c != nil {
 		for _, p := range f.Panes {

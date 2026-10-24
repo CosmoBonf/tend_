@@ -192,6 +192,9 @@ type tui struct {
 	linkHover *ui.LinkHover
 	// worktreeOpen is herdr's open-worktree popup while it is up.
 	worktreeOpen *worktreeOpenState
+	// sideBySide is the "side by side..." popup while it is up
+	// (tui_sidebyside.go).
+	sideBySide *sideBySideState
 	// folderPick is the folder picker while it is up (tui_folderpick.go).
 	folderPick *folderPickState
 	// toast is the notification card shown, and toastQueue those waiting.
@@ -1072,7 +1075,7 @@ func (t *tui) wantsMotionLocked() bool {
 	if !t.config.UI.Mouse {
 		return false
 	}
-	if t.menu != nil || t.navigator != nil || t.worktreeOpen != nil || t.folderPick != nil {
+	if t.menu != nil || t.navigator != nil || t.worktreeOpen != nil || t.folderPick != nil || t.sideBySide != nil {
 		return true
 	}
 	inView := make(map[uint64]bool, len(t.rects))
@@ -1162,6 +1165,7 @@ func (t *tui) buildFrame() ui.Frame {
 		LinkHover:    t.linkHover,
 
 		WorktreeOpen: t.worktreeOpenFrameLocked(),
+		SideBySide:   t.sideBySideFrameLocked(),
 		FolderPick:   t.folderPickFrameLocked(),
 		Selection:    t.sel,
 		Waiting:      t.waitingLocked(),
@@ -1441,6 +1445,11 @@ func (t *tui) handleInput(data []byte) error {
 
 	if t.worktreeOpenUp() {
 		t.worktreeOpenKeys(forward)
+		forward = nil
+	}
+
+	if t.sideBySideUp() {
+		t.sideBySideKeys(forward)
 		forward = nil
 	}
 

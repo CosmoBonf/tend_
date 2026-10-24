@@ -293,6 +293,9 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 	if handled, err := t.worktreeOpenMouse(ev); handled {
 		return err
 	}
+	if handled, err := t.sideBySideMouse(ev); handled {
+		return err
+	}
 	if handled, err := t.folderPickMouse(ev); handled {
 		return err
 	}
@@ -825,7 +828,17 @@ func (t *tui) clickSidebar(x, y int) (bool, error) {
 		t.toggleSSHGroup(row.Group)
 		return true, nil
 	case row.Action == ui.ActionNewSpace:
-		return true, t.newWorkspace()
+		// A space, or "side by side..." (tui_sidebyside.go); prefix+N still
+		// makes a space at once. With no pane in view there is nothing to be
+		// side by side with, and new makes the space, as it did.
+		t.mu.Lock()
+		empty := t.focus == 0
+		t.mu.Unlock()
+		if empty {
+			return true, t.newWorkspace()
+		}
+		t.openMenu(ui.NewSpaceMenu(x, y))
+		return true, nil
 	case row.Action == ui.ActionToggleGroup:
 		t.toggleGroup(row.Group)
 		return true, nil

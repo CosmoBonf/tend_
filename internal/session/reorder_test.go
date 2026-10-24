@@ -2,6 +2,7 @@ package session
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -163,6 +164,89 @@ func TestMovingAPaneToAnotherTabKeepsIt(t *testing.T) {
 	}
 	if _, ok := s.Tab(first.ID); ok {
 		t.Error("the emptied tab is still there")
+	}
+	if err := s.CheckInvariants(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestAPaneBroughtFromASpaceItWasAloneInClosesThatSpace: an ssh
+// connection's space holds one pane; bringing that pane beside another
+// leaves the space with nothing in it, and it goes. If it regresses, the
+// space stays, listing no tab, and opening onto nothing.
+func TestAPaneBroughtFromASpaceItWasAloneInClosesThatSpace(t *testing.T) {
+	s := New()
+	work := s.AddWorkspace("work")
+	_, here, err := s.AddTab(work.ID, "one", PaneSpec{Command: []string{"sh"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ssh := s.AddWorkspace("vps")
+	_, conn, err := s.AddTab(ssh.ID, "vps", PaneSpec{Command: []string{"ssh"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.MovePane(conn.ID, here.ID, Columns); err != nil {
+		t.Fatalf("MovePane: %v", err)
+	}
+	if _, ok := s.Workspace(ssh.ID); ok {
+		t.Error("the space the pane was alone in is still there")
+	}
+	if _, ok := s.Workspace(work.ID); !ok {
+		t.Error("the space it was brought to went")
+	}
+	if err := s.CheckInvariants(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestAPaneIsSentToATabOfItsOwn is "send to new tab", the way back from
+// "side by side...": the pane leaves its tab for a new one right after it,
+// in the same space, focused, and is the same pane. If it regresses, a pane
+// brought beside another can only be closed, and what runs in it with it.
+func TestAPaneIsSentToATabOfItsOwn(t *testing.T) {
+	s := New()
+	w := s.AddWorkspace("work")
+	first, a, err := s.AddTab(w.ID, "one", PaneSpec{Command: []string{"sh"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.SplitPane(a.ID, Columns, PaneSpec{Command: []string{"ssh"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = s.AddTab(w.ID, "two", PaneSpec{Command: []string{"sh"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tab, err := s.BreakPane(b.ID, "vps")
+	if err != nil {
+		t.Fatalf("BreakPane: %v", err)
+	}
+	var order []string
+	for _, tb := range w.Tabs() {
+		order = append(order, tb.Name)
+	}
+	if got := strings.Join(order, " "); got != "one vps two" {
+		t.Errorf("tabs are %s, want the new one after the one it left", got)
+	}
+	if got := first.Panes(); len(got) != 1 || got[0] != a.ID {
+		t.Errorf("the tab it left holds %v", got)
+	}
+	nt, ok := s.Tab(tab)
+	if !ok {
+		t.Fatal("no new tab")
+	}
+	if p, ok := nt.Pane(b.ID); !ok || p.Command[0] != "ssh" {
+		t.Errorf("the pane was not carried over as it was: %+v %v", p, ok)
+	}
+	if s.ActiveWorkspace().ActiveTab().ID != tab {
+		t.Error("the new tab is not the one in view")
+	}
+	if _, err := s.BreakPane(a.ID, "x"); !errors.Is(err, ErrNoMove) {
+		t.Errorf("a pane alone in its tab was broken out: %v", err)
 	}
 	if err := s.CheckInvariants(); err != nil {
 		t.Fatal(err)

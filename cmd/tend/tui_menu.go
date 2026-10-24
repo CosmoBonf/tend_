@@ -403,6 +403,15 @@ func (t *tui) runMenu(m ui.Menu, item ui.MenuItem) error {
 		t.startPrompt(promptRenamePane)
 		return nil
 
+	case ui.MenuSideBySide:
+		// From a pane's menu, beside that pane; from "new", beside the one
+		// in view.
+		t.openSideBySide(m.Pane)
+		return nil
+
+	case ui.MenuSendToTab:
+		return t.sendToNewTab(m.Pane)
+
 	case ui.MenuSplitRight, ui.MenuSplitDown:
 		dir := "columns"
 		if item.Action == ui.MenuSplitDown {

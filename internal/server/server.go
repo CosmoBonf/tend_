@@ -1023,6 +1023,18 @@ func (s *Server) MovePane(id, beside session.PaneID, dir session.Direction) erro
 		Event{Kind: EventPaneMoved, Pane: id})
 }
 
+// BreakPane takes a pane into a tab of its own beside the one it was in.
+// Nothing restarts.
+func (s *Server) BreakPane(id session.PaneID, name string) (session.TabID, error) {
+	var tab session.TabID
+	err := s.rearrange(func(sess *session.Session) error {
+		var err error
+		tab, err = sess.BreakPane(id, name)
+		return err
+	})
+	return tab, s.announce(err, Event{Kind: EventPaneMoved, Pane: id})
+}
+
 // MoveTab puts a tab at index, or delta places along when delta is set.
 func (s *Server) MoveTab(id session.TabID, index, delta int) error {
 	return s.announce(s.moveTab(id, index, delta), Event{Kind: EventTabMoved, Tab: id})

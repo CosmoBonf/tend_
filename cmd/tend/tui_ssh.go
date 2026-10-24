@@ -89,19 +89,22 @@ func (t *tui) sshSaveLocked() bool {
 	return true
 }
 
-// sshOpenLocked is where a connection is open, if it still is: a space
-// closed by other means is forgotten here as well.
+// sshOpenLocked is where a connection is open, if it still is: the pane ssh
+// runs in, and the space that pane is in now. The pane is what is followed,
+// not the space: "side by side..." brings it beside another pane, in
+// another space, and the connection is open there just the same.
 //
 // A client started after the connection was opened has no record of it, so
-// the session is asked: a space in the ssh group named after the connection
-// is it, and its first pane is ssh's. Without that, reopening tend lost the
-// ● and a second click opened the connection twice.
+// the session is asked: a pane the connection named after itself, or the
+// first pane of a space in the ssh group named after it (one opened before
+// panes were named). Without that, reopening tend lost the ● and a second
+// click opened the connection twice.
 func (t *tui) sshOpenLocked(id string) (sshOpen, bool) {
 	if o, ok := t.ssh.open[id]; ok {
-		for _, w := range t.snap.Workspaces {
-			if w.ID == o.workspace {
-				return o, true
-			}
+		if ws, _, found := t.paneWhereLocked(o.pane); found {
+			o.workspace = ws
+			t.ssh.open[id] = o
+			return o, true
 		}
 		delete(t.ssh.open, id)
 	}
@@ -109,18 +112,43 @@ func (t *tui) sshOpenLocked(id string) (sshOpen, bool) {
 	if !ok {
 		return sshOpen{}, false
 	}
-	for _, w := range t.snap.Workspaces {
-		if w.Group != sshGroup || w.Name != c.Name || len(w.Tabs) == 0 || len(w.Tabs[0].Panes) == 0 {
-			continue
+	found := sshOpen{}
+	for _, p := range t.snap.Panes {
+		if p.Named && p.Title == c.Name {
+			if ws, _, ok := t.paneWhereLocked(p.ID); ok {
+				found = sshOpen{workspace: ws, pane: p.ID}
+			}
 		}
-		o := sshOpen{workspace: w.ID, pane: w.Tabs[0].Panes[0]}
-		if t.ssh.open == nil {
-			t.ssh.open = make(map[string]sshOpen)
-		}
-		t.ssh.open[id] = o
-		return o, true
 	}
-	return sshOpen{}, false
+	if found.pane == 0 {
+		for _, w := range t.snap.Workspaces {
+			if w.Group == sshGroup && w.Name == c.Name && len(w.Tabs) > 0 && len(w.Tabs[0].Panes) > 0 {
+				found = sshOpen{workspace: w.ID, pane: w.Tabs[0].Panes[0]}
+			}
+		}
+	}
+	if found.pane == 0 {
+		return sshOpen{}, false
+	}
+	if t.ssh.open == nil {
+		t.ssh.open = make(map[string]sshOpen)
+	}
+	t.ssh.open[id] = found
+	return found, true
+}
+
+// paneWhereLocked is the space and tab a pane is in, if it is still there.
+func (t *tui) paneWhereLocked(pane uint64) (ws, tab uint64, ok bool) {
+	for _, w := range t.snap.Workspaces {
+		for _, tb := range w.Tabs {
+			for _, id := range tb.Panes {
+				if id == pane {
+					return w.ID, tb.ID, true
+				}
+			}
+		}
+	}
+	return 0, 0, false
 }
 
 // listSwitch is the button beside "menu": where it takes the list.
@@ -315,7 +343,8 @@ func (t *tui) connectSSH(id string) error {
 		return nil
 	}
 	if open {
-		return t.showWorkspace(o.workspace)
+		// Wherever it is now: its own space, or beside another pane.
+		return t.jumpToPane(o.pane)
 	}
 	if c.Password != "" && remote {
 		t.setMessage(c.Name+": a saved password works in a session on this machine only", true)
@@ -339,6 +368,10 @@ func (t *tui) connectSSH(id string) error {
 		t.setMessage(c.Name+" did not open: "+refusalText(err), true)
 		return nil
 	}
+	// Named after the connection, which ssh's own title then does not
+	// replace: a client started later finds the connection by it, even once
+	// the pane has been brought beside another, out of its space.
+	_ = t.client.RenamePane(pane, c.Name)
 	t.mu.Lock()
 	if t.ssh.open == nil {
 		t.ssh.open = make(map[string]sshOpen)
@@ -356,27 +389,52 @@ func (t *tui) connectSSH(id string) error {
 // reports whether the pane was one.
 func (t *tui) sshPaneExited(pane uint64) bool {
 	t.mu.Lock()
-	ws := uint64(0)
+	t.sshLoadLocked()
+	known := false
 	for id, o := range t.ssh.open {
 		if o.pane == pane {
-			ws = o.workspace
+			known = true
 			delete(t.ssh.open, id)
 		}
 	}
-	if ws == 0 {
-		// Opened before this client started: a space of the ssh group whose
-		// first pane this is was opened as a connection.
-		for _, w := range t.snap.Workspaces {
-			if w.Group == sshGroup && len(w.Tabs) > 0 && len(w.Tabs[0].Panes) > 0 && w.Tabs[0].Panes[0] == pane {
-				ws = w.ID
+	ws, _, there := t.paneWhereLocked(pane)
+	alone := false
+	for _, w := range t.snap.Workspaces {
+		if w.ID != ws {
+			continue
+		}
+		if w.Group == sshGroup && len(w.Tabs) == 1 && len(w.Tabs[0].Panes) == 1 {
+			// Opened before this client started: a space of the ssh group
+			// whose only pane this is was opened as a connection.
+			alone, known = true, true
+		}
+	}
+	if !known {
+		// Opened before this client started and since brought beside
+		// another pane: it carries the connection's name.
+		for _, p := range t.snap.Panes {
+			if p.ID == pane && p.Named {
+				for _, c := range t.ssh.store.Connections {
+					if c.Name == p.Title {
+						known = true
+					}
+				}
 			}
 		}
 	}
 	t.mu.Unlock()
-	if ws == 0 {
+	if !known || !there {
 		return false
 	}
-	if err := t.client.CloseWorkspace(ws); err != nil {
+	// Its own space goes with it; a pane brought beside others goes alone,
+	// leaving the space it was brought to — somebody's work — as it was.
+	var err error
+	if alone {
+		err = t.client.CloseWorkspace(ws)
+	} else {
+		err = t.client.ClosePane(pane)
+	}
+	if err != nil {
 		t.setMessage(err.Error(), true)
 	}
 	return true

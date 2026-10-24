@@ -1393,7 +1393,8 @@ func TestAttachTogglesGroupedByClicking(t *testing.T) {
 	})
 }
 
-// TestAttachClickNewSpace: the row says "new", so clicking it has to make one.
+// TestAttachClickNewSpace: the row says "new", so clicking it offers a new
+// space, and "side by side..." with it; "new space" makes one.
 func TestAttachClickNewSpace(t *testing.T) {
 	a := startSession(t, 90, 14)
 	a.waitForScreen(t, "the new row", func(s string) bool {
@@ -1401,6 +1402,10 @@ func TestAttachClickNewSpace(t *testing.T) {
 	})
 
 	a.clickAt(t, 2, a.lineContaining(t, "new"))
+	a.waitForScreen(t, "the new menu", func(s string) bool {
+		return strings.Contains(s, "new space") && strings.Contains(s, "side by side...")
+	})
+	a.clickAt(t, columnOfString(a.lines()[a.lineContaining(t, "new space")-1], "new space")+2, a.lineContaining(t, "new space"))
 	a.waitForScreen(t, "a second space", func(s string) bool {
 		return strings.Contains(s, "space 2")
 	})
@@ -1933,10 +1938,12 @@ func TestAttachClosingTheLastSpaceLeavesAnEmptySession(t *testing.T) {
 	a.waitForScreen(t, "the session to empty", func(s string) bool {
 		return !strings.Contains(s, "┌") && !strings.Contains(a.sidebarText(), "main")
 	})
-	// And it is not a dead end: the button that makes one is still there.
+	// And it is not a dead end: the button that makes one is still there,
+	// and with nothing in view it makes one at once rather than offering
+	// "side by side..." with nothing to be beside.
 	a.clickAt(t, 2, a.lineContaining(t, "new"))
 	a.waitForScreen(t, "a space again", func(s string) bool {
-		return strings.Contains(s, "┌")
+		return strings.Contains(s, "┌") && strings.Contains(a.sidebarText(), "space") && !strings.Contains(s, "side by side")
 	})
 }
 
@@ -2290,8 +2297,10 @@ func TestAttachPinsTheSpaceButtonsAboveTheDivider(t *testing.T) {
 		t.Errorf("the buttons moved from %d to %d when the list grew:\n%s", buttons, moved, a.sidebarText())
 	}
 
-	// And they still work where they are.
+	// And they still work where they are: new offers a space, and makes it.
 	a.clickAt(t, 2, buttons+1)
+	a.waitForScreen(t, "the new menu", func(s string) bool { return strings.Contains(s, "new space") })
+	a.clickText(t, "new space")
 	a.waitForScreen(t, "a new space", func(string) bool {
 		return strings.Contains(a.sidebarText(), "space 6")
 	})

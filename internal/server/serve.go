@@ -59,6 +59,8 @@ var Methods = []string{
 	proto.MethodPaneEditScrollback,
 	proto.MethodPaneGraphics,
 	proto.MethodPaneSwap,
+	proto.MethodPaneMove,
+	proto.MethodPaneBreak,
 	proto.MethodTabMove,
 	proto.MethodWorkspaceMove,
 	proto.MethodCommandRun,
@@ -864,6 +866,25 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 		}
 		other, err := c.srv.SwapPaneToward(session.PaneID(p.Pane), side, session.Rect{W: p.Cols, H: p.Rows})
 		return proto.PaneSwapResult{Other: uint64(other)}, err
+
+	case proto.MethodPaneMove:
+		var p proto.PaneMoveParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		dir := session.Columns
+		if p.Down {
+			dir = session.Rows
+		}
+		return nil, c.srv.MovePane(session.PaneID(p.Pane), session.PaneID(p.Beside), dir)
+
+	case proto.MethodPaneBreak:
+		var p proto.PaneBreakParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		tab, err := c.srv.BreakPane(session.PaneID(p.Pane), p.Name)
+		return proto.PaneBreakResult{Tab: uint64(tab)}, err
 
 	case proto.MethodTabMove:
 		var p proto.MoveParams

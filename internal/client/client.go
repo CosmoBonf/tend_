@@ -752,6 +752,19 @@ func (c *Client) SwapPanes(pane, target uint64) error {
 	return c.Call(proto.MethodPaneSwap, proto.PaneSwapParams{Pane: pane, Target: target}, nil)
 }
 
+// MovePane puts a pane beside another, or below it, in whatever tab or
+// space that one is in; nothing restarts.
+func (c *Client) MovePane(pane, beside uint64, down bool) error {
+	return c.Call(proto.MethodPaneMove, proto.PaneMoveParams{Pane: pane, Beside: beside, Down: down}, nil)
+}
+
+// BreakPane takes a pane into a tab of its own, and says which.
+func (c *Client) BreakPane(pane uint64, name string) (uint64, error) {
+	var out proto.PaneBreakResult
+	err := c.Call(proto.MethodPaneBreak, proto.PaneBreakParams{Pane: pane, Name: name}, &out)
+	return out.Tab, err
+}
+
 // MoveTab moves a tab delta places along its row.
 func (c *Client) MoveTab(tab uint64, delta int) error {
 	return c.Call(proto.MethodTabMove, proto.MoveParams{ID: tab, Delta: delta}, nil)

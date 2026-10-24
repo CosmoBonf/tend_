@@ -217,10 +217,73 @@ func (s *Session) MovePane(id, beside PaneID, dir Direction) error {
 	s.index[id] = to
 
 	if from != to && from.root == nil {
-		// The tab it left is empty now.
+		// The tab it left is empty now, and so may be its space: a pane
+		// brought beside another from a space it was alone in — an ssh
+		// connection's — took the space with it. Left there, the space
+		// listed nothing and opened onto nothing.
+		ws, _ := s.workspaceOfTab(from.ID)
 		_, _ = s.CloseTab(from.ID)
+		if ws != nil && len(ws.tabs) == 0 {
+			_, _ = s.CloseWorkspace(ws.ID)
+		}
 	}
 	return nil
+}
+
+// BreakPane takes a pane out of its tab into a tab of its own, named name,
+// beside the one it left in the same space, and focuses it: the way back
+// from bringing a pane beside another. As with MovePane, the pane is not
+// remade, so what runs in it goes on.
+func (s *Session) BreakPane(id PaneID, name string) (TabID, error) {
+	from, ok := s.index[id]
+	if !ok {
+		return 0, fmt.Errorf("%w: %d", ErrNoSuchPane, id)
+	}
+	if len(from.panes) == 1 {
+		return 0, ErrNoMove // a tab of its own already
+	}
+	ws, at := s.workspaceOfTab(from.ID)
+	if ws == nil {
+		return 0, fmt.Errorf("%w: %d", ErrNoSuchPane, id)
+	}
+	root, closed := from.root.closePane(id)
+	if !closed {
+		return 0, fmt.Errorf("%w: %d", ErrNoSuchPane, id)
+	}
+	pane := from.panes[id]
+	from.root = root
+	delete(from.panes, id)
+	if from.active == id {
+		if remaining := from.Panes(); len(remaining) > 0 {
+			from.active = remaining[0]
+		}
+	}
+
+	s.nextTab++
+	t := &Tab{ID: TabID(s.nextTab), Name: name, panes: map[PaneID]*Pane{id: pane}}
+	t.root = leaf(id)
+	t.active = id
+	s.index[id] = t
+	ws.tabs = append(ws.tabs[:at+1], append([]*Tab{t}, ws.tabs[at+1:]...)...)
+	ws.active = at + 1
+	for i, w := range s.workspaces {
+		if w == ws {
+			s.active = i
+		}
+	}
+	return t.ID, nil
+}
+
+// workspaceOfTab is the space a tab is in, and the tab's place in it.
+func (s *Session) workspaceOfTab(id TabID) (*Workspace, int) {
+	for _, w := range s.workspaces {
+		for i, t := range w.tabs {
+			if t.ID == id {
+				return w, i
+			}
+		}
+	}
+	return nil, 0
 }
 
 // restoreInto puts a pane back into a tree that has just lost it, which is

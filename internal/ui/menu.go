@@ -56,6 +56,11 @@ const (
 	// MenuContinueWith hands it to the one in Arg (docs/MEMORY.md).
 	MenuContinueIn   = "continue-in"
 	MenuContinueWith = "continue-with"
+	// MenuSideBySide opens the "side by side..." popup, to bring a pane
+	// open elsewhere beside the pane in view; MenuSendToTab takes a pane
+	// into a tab of its own, the way back.
+	MenuSideBySide = "menu-side-by-side"
+	MenuSendToTab  = "menu-send-to-tab"
 	// MenuFiles opens or closes the file explorer panel, prefix+f.
 	MenuFiles    = "menu-files"
 	MenuMoveBack = "menu-move-back"
@@ -267,6 +272,17 @@ func SSHNewMenu(x, y int) Menu {
 	return Menu{Title: "new", X: x, Y: y, Items: []MenuItem{
 		{Label: "new connection...", Action: MenuSSHNew},
 		{Label: "new group...", Action: MenuSSHNewGroup},
+		{Label: "side by side...", Action: MenuSideBySide},
+	}}
+}
+
+// NewSpaceMenu is the spaces list's "new": a space, or something open
+// elsewhere brought beside the pane in view. It was a space at once; the
+// owner asked for "side by side..." there, where new things are made.
+func NewSpaceMenu(x, y int) Menu {
+	return Menu{Title: "new", X: x, Y: y, Items: []MenuItem{
+		{Label: "new space", Action: MenuNewSpace},
+		{Label: "side by side...", Action: MenuSideBySide},
 	}}
 }
 
@@ -350,6 +366,7 @@ func PaneMenu(pane uint64, x, y int, closable, agent bool) Menu {
 	items := []MenuItem{
 		{Label: "split right", Action: MenuSplitRight},
 		{Label: "split down", Action: MenuSplitDown},
+		{Label: "side by side...", Action: MenuSideBySide},
 		{Label: "zoom", Action: MenuZoom},
 		{Label: "rename pane", Action: MenuRenamePane},
 		{Label: "rename tab", Action: MenuRename},
@@ -359,7 +376,9 @@ func PaneMenu(pane uint64, x, y int, closable, agent bool) Menu {
 		items = append(items, MenuItem{Label: "continue in...", Action: MenuContinueIn})
 	}
 	if closable {
-		items = append(items, MenuItem{Label: "close pane", Action: MenuClose})
+		// Only a pane that shares its tab: one alone has a tab of its own.
+		items = append(items, MenuItem{Label: "send to new tab", Action: MenuSendToTab},
+			MenuItem{Label: "close pane", Action: MenuClose})
 	}
 	return Menu{Title: "pane", Items: items, X: x, Y: y, Pane: pane}
 }

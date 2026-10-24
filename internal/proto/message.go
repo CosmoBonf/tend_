@@ -145,8 +145,14 @@ const (
 	// of its own.
 	MethodPaneEditScrollback = "pane.edit_scrollback"
 	// MethodPaneGraphics fetches the images a pane holds and where they go.
-	MethodPaneGraphics  = "pane.graphics"
-	MethodPaneSwap      = "pane.swap"
+	MethodPaneGraphics = "pane.graphics"
+	MethodPaneSwap     = "pane.swap"
+	// MethodPaneMove takes a pane out of its tab and puts it beside another,
+	// in any tab or space, without restarting it: "side by side...".
+	MethodPaneMove = "pane.move"
+	// MethodPaneBreak takes a pane into a tab of its own beside the one it
+	// was in: "send to new tab", the way back.
+	MethodPaneBreak     = "pane.break"
 	MethodTabMove       = "tab.move"
 	MethodWorkspaceMove = "workspace.move"
 	// MethodCommandRun runs one of the user's [[keys.command]] entries where
@@ -224,6 +230,8 @@ var KnownMethods = []string{
 	MethodPaneEditScrollback,
 	MethodPaneGraphics,
 	MethodPaneSwap,
+	MethodPaneMove,
+	MethodPaneBreak,
 	MethodTabMove,
 	MethodWorkspaceMove,
 	MethodCommandRun,
@@ -1277,6 +1285,24 @@ type PaneSwapParams struct {
 	Side   string `json:"side,omitempty"`
 	Cols   int    `json:"cols,omitempty"`
 	Rows   int    `json:"rows,omitempty"`
+}
+
+// PaneMoveParams puts Pane beside Beside, or below it with Down.
+type PaneMoveParams struct {
+	Pane   uint64 `json:"pane"`
+	Beside uint64 `json:"beside"`
+	Down   bool   `json:"down,omitempty"`
+}
+
+// PaneBreakParams takes Pane into a tab of its own called Name.
+type PaneBreakParams struct {
+	Pane uint64 `json:"pane"`
+	Name string `json:"name,omitempty"`
+}
+
+// PaneBreakResult names the tab the pane is now the whole of.
+type PaneBreakResult struct {
+	Tab uint64 `json:"tab"`
 }
 
 // PaneSwapResult names the pane it traded places with.
