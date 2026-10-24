@@ -20,11 +20,12 @@ import (
 func runView(args []string) error {
 	fs := flag.NewFlagSet("view", flag.ExitOnError)
 	line := fs.Int("line", 0, "line to show and mark, from 1")
-	editor := fs.String("editor", "", "command o edits with (default: $VISUAL, $EDITOR, vi)")
+	editor := fs.String("editor", "", "command o edits with (default: [files] editor, $VISUAL, $EDITOR, vi)")
 	fs.Usage = func() {
 		fs.Output().Write([]byte("usage: tend view [-line n] <file>\n\n" +
 			"Shows a file read-only with line numbers and syntax colour;\n" +
-			"the files panel's preview. q closes, o opens it in the editor,\n" +
+			"the files panel's preview. q closes, o edits it here and comes\n" +
+			"back when the editor exits,\n" +
 			"w wraps long lines.\n\n"))
 		fs.PrintDefaults()
 	}
@@ -40,13 +41,21 @@ func runView(args []string) error {
 	if err != nil {
 		return err
 	}
-	if *editor == "" {
-		*editor = server.Editor()
-	}
+	// -editor fixes the editor; without it, it is looked up at each open,
+	// so one chosen on the settings screen is used by a panel already open.
 	opener := &explorer.SessionOpener{
 		Socket: os.Getenv(api.EnvSocketPath),
 		Pane:   os.Getenv(api.EnvPaneID),
 		Editor: *editor,
+		Choose: server.Editor,
 	}
-	return explorer.RunPreview(explorer.NewPreview(path, *line, opener), os.Stdin, os.Stdout)
+	preview := explorer.NewPreview(path, *line, opener)
+	// o edits here, in the preview's own pane, and comes back to it.
+	preview.EditInPlace(func() string {
+		if *editor != "" {
+			return *editor
+		}
+		return server.Editor()
+	})
+	return explorer.RunPreview(preview, os.Stdin, os.Stdout)
 }

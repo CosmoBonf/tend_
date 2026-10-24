@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/auth-com-br/tend/internal/config"
 	"github.com/auth-com-br/tend/internal/session"
 )
 
@@ -56,9 +57,19 @@ func (s *Server) EditScrollback(id session.PaneID, editor string) (session.PaneI
 	return pane, nil
 }
 
-// Editor is what to open text with: the user's choice, or vi, which is on
-// every machine that has a terminal.
+// Editor is what to open text with: the one chosen in the settings
+// ([files] editor), else the environment's, else vi, which is on every
+// machine that has a terminal.
+//
+// The settings file is read on each call, so a choice made on the settings
+// screen is used by the next file opened, with no restart: the server's
+// environment is fixed when it starts.
 func Editor() string {
+	if cfg, err := config.LoadLenient(); err == nil {
+		if e := strings.TrimSpace(cfg.Files.Editor); e != "" {
+			return e
+		}
+	}
 	for _, name := range []string{"VISUAL", "EDITOR"} {
 		if value := strings.TrimSpace(os.Getenv(name)); value != "" {
 			return value

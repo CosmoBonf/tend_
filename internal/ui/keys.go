@@ -262,7 +262,7 @@ var Keys = []struct {
 	{"x", CommandClosePane, "close pane"},
 	{"z", CommandZoom, "zoom pane"},
 	{"[", CommandScroll, "copy mode"},
-	{"e", CommandEditScrollback, "history in $EDITOR"},
+	{"e", CommandEditScrollback, "history in the editor"},
 	{"f", CommandFiles, "files and git, docked left"},
 	{"HJKL", CommandSwapRight, "swap pane"},
 	{"r", CommandResizeMode, "resize (hjkl, esc)"},

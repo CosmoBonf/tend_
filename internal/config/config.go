@@ -299,6 +299,13 @@ type Files struct {
 	// AutoOpen docks the panel in every tab as it is shown, herdr-sidebar's
 	// auto_open, save in a tab where it was closed. Nil is on, as there.
 	AutoOpen *bool `toml:"auto_open"`
+	// Editor is the command a file is edited with (o in the preview, the
+	// panel's open) and a pane's history is read in. Empty is $VISUAL, then
+	// $EDITOR, then vi. It is a setting as well as the environment because
+	// the environment that counts is the server's, set when it started, and
+	// the owner looked for the choice on the settings screen, not in a shell
+	// profile followed by a restart.
+	Editor string `toml:"editor"`
 }
 
 // FilesAutoOpen is whether the panel opens by itself in each tab.
@@ -1079,6 +1086,9 @@ follow = true
 auto_open = true
 # Hide entries whose name starts with a dot.
 hidden = false
+# The editor files and a pane's history open in: "micro", "nano", "vim"...
+# Empty uses $VISUAL, then $EDITOR, then vi.
+editor = ""
 
 [notify]
 # How to say that an agent finished or needs answering:

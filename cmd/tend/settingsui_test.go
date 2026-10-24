@@ -58,3 +58,46 @@ func TestTheSettingsScreenInstallsAnAgentsHooks(t *testing.T) {
 		t.Errorf("after removing, the row says %q", got)
 	}
 }
+
+// TestTheEditorRowOffersTheEditorsInstalledHere: the settings screen lists
+// the editors found on this machine, after "automatic", keeps one written in
+// the file by hand, and is not offered to a client on another machine. If it
+// regresses, choosing micro means a shell profile and a server restart, which
+// is what the owner went to the settings screen to avoid.
+func TestTheEditorRowOffersTheEditorsInstalledHere(t *testing.T) {
+	bin := t.TempDir()
+	for _, name := range []string{"micro", "nano"} {
+		if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", bin)
+
+	rows := editorRows(false, "")
+	if len(rows) != 1 {
+		t.Fatalf("want one editor row, got %d", len(rows))
+	}
+	var got []string
+	for _, c := range rows[0].choices {
+		got = append(got, c.label+"="+c.toml)
+	}
+	if want := `automatic="" micro="micro" nano="nano"`; strings.Join(got, " ") != want {
+		t.Errorf("choices are %s, want %s", strings.Join(got, " "), want)
+	}
+	cfg := config.Defaults()
+	if v := rows[0].value(cfg); v != `""` {
+		t.Errorf("with nothing chosen the row reads %s, want automatic", v)
+	}
+	cfg.Files.Editor = "micro"
+	if v := rows[0].value(cfg); v != `"micro"` {
+		t.Errorf("with micro chosen the row reads %s", v)
+	}
+
+	custom := editorRows(false, "code --wait")[0].choices
+	if last := custom[len(custom)-1]; last.toml != `"code --wait"` {
+		t.Errorf("an editor set by hand is not kept as a choice: %+v", custom)
+	}
+	if len(editorRows(true, "")) != 0 {
+		t.Error("a client on another machine must not be offered this machine's editors")
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -65,7 +66,18 @@ type Preview struct {
 	message   string
 
 	opener Opener
+	// editor, when set, is the editor o runs in the preview's own pane,
+	// asked at each o so one chosen on the settings screen is used; and
+	// editing is the o waiting for RunPreview to hand the terminal over.
+	editor  func() string
+	editing bool
 }
+
+// EditInPlace makes o edit the file in this pane: the preview steps aside
+// for the editor and comes back, reading what was saved, when it exits. The
+// owner asked for it: o used to open the editor in a tab of its own, and
+// closing it went back to the preview tab, one tab too many.
+func (p *Preview) EditInPlace(editor func() string) { p.editor = editor }
 
 // NewPreview shows a file, with line (from one) in view and lit.
 func NewPreview(path string, line int, opener Opener) *Preview {
@@ -75,7 +87,7 @@ func NewPreview(path string, line int, opener Opener) *Preview {
 }
 
 func (p *Preview) load(path string, line int) {
-	*p = Preview{opener: p.opener, cols: p.cols, rows: p.rows, wrap: p.wrap, raw: p.raw, path: path, mark: line}
+	*p = Preview{opener: p.opener, editor: p.editor, cols: p.cols, rows: p.rows, wrap: p.wrap, raw: p.raw, path: path, mark: line}
 	info, err := os.Stat(path)
 	if err != nil {
 		p.err = err
@@ -191,6 +203,10 @@ func (p *Preview) Key(k Key) {
 	case "r":
 		p.load(p.path, p.mark)
 	case "o":
+		if p.editor != nil && canEditInPlace {
+			p.editing = true
+			return
+		}
 		if p.opener == nil {
 			p.message = "nowhere to open files: not running in a tend pane"
 			return
@@ -328,24 +344,12 @@ func RunPreview(p *Preview, in *os.File, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	defer term.Restore(fd, state)
+	defer func() { _ = term.Restore(fd, state) }()
 	_, _ = io.WriteString(out, enterScreen)
-	defer io.WriteString(out, leaveScreen)
+	defer func() { _, _ = io.WriteString(out, leaveScreen) }()
 
-	input := make(chan []byte, 16)
-	go func() {
-		buf := make([]byte, 4096)
-		for {
-			n, err := in.Read(buf)
-			if n > 0 {
-				input <- append([]byte(nil), buf[:n]...)
-			}
-			if err != nil {
-				close(input)
-				return
-			}
-		}
-	}()
+	keys := newKeyReader(in)
+	go keys.run()
 	resized := make(chan struct{}, 1)
 	stop := notifyResize(resized)
 	defer stop()
@@ -370,7 +374,7 @@ func RunPreview(p *Preview, in *os.File, out io.Writer) error {
 	draw()
 	for !p.Quit() {
 		select {
-		case data, ok := <-input:
+		case data, ok := <-keys.out:
 			if !ok {
 				return nil
 			}
@@ -385,14 +389,67 @@ func RunPreview(p *Preview, in *os.File, out io.Writer) error {
 				case Retarget:
 					p.load(e.Path, e.Line)
 				}
+				if p.editing {
+					break
+				}
 			}
 		case <-resized:
 		case <-tick.C:
 			p.Tick()
 		}
+		if p.editing {
+			// What was typed after o was typed before the editor was there
+			// to take it, and is not the editor's.
+			p.editing, pending = false, nil
+			p.editHere(keys, fd, state, in, out)
+			painter.Invalidate()
+		}
 		draw()
 	}
 	return nil
+}
+
+// editHere runs the editor on the preview's file in this pane, as less runs
+// it on v: the key reader stops, so no key meant for the editor is read here;
+// the screen and the terminal's modes are put back as a shell left them; and
+// after the editor, the preview takes the terminal back and reads the file
+// again, keeping its place.
+func (p *Preview) editHere(keys *keyReader, fd int, raw *term.State, in *os.File, out io.Writer) {
+	keys.pause()
+	defer keys.resume()
+	_, _ = io.WriteString(out, leaveScreen)
+	_ = term.Restore(fd, raw)
+
+	line := p.mark
+	if line == 0 {
+		line = p.top + 1
+	}
+	editor := strings.TrimSpace(p.editor())
+	if editor == "" {
+		editor = "vi"
+	}
+	// Through a shell, so an editor with flags in it works, and the path as
+	// an argument, so one with spaces in it reaches the editor as it is: the
+	// command the tab used to run.
+	cmd := exec.Command("/bin/sh", "-c", editorAt(editor, line)+` "$1"`, "tend-edit", p.path)
+	cmd.Dir = filepath.Dir(p.path)
+	cmd.Stdin, cmd.Stderr = in, os.Stderr
+	cmd.Stdout = os.Stdout
+	if f, ok := out.(*os.File); ok {
+		cmd.Stdout = f
+	}
+	restore := holdInterrupts()
+	err := cmd.Run()
+	restore()
+
+	if _, rerr := term.MakeRaw(fd); rerr != nil && err == nil {
+		err = rerr
+	}
+	_, _ = io.WriteString(out, enterScreen)
+	p.Tick()
+	if err != nil {
+		p.message = editor + ": " + err.Error()
+	}
 }
 
 // truncateLeft keeps the end of text, which for a path is the part that

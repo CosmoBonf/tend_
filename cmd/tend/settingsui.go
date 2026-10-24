@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -153,6 +155,37 @@ func themeChoices() []settingChoice {
 	return out
 }
 
+// knownEditors are the terminal editors the editor row looks for, the
+// friendliest first: micro and nano save on ctrl+s and ctrl+o, which is what
+// somebody who did not choose vi expects.
+var knownEditors = []string{"micro", "nano", "vim", "nvim", "hx", "emacs", "kak", "vi"}
+
+// editorRows is the editor files and a pane's history open in: automatic
+// (the environment's, else vi), or one of the editors installed here. Like
+// the integrations, it is found on this machine, so a client attached over
+// ssh, whose editors are another machine's, is not offered it. An editor
+// written in the file by hand is kept as a choice, so the row shows it.
+func editorRows(remote bool, current string) []settingRow {
+	if remote {
+		return nil
+	}
+	choices := []settingChoice{{"automatic", `""`}}
+	current = strings.TrimSpace(current)
+	for _, name := range knownEditors {
+		if _, err := exec.LookPath(name); err == nil {
+			choices = append(choices, settingChoice{name, config.Quote(name)})
+		}
+	}
+	if current != "" && !slices.ContainsFunc(choices, func(c settingChoice) bool { return c.toml == config.Quote(current) }) {
+		choices = append(choices, settingChoice{current, config.Quote(current)})
+	}
+	return []settingRow{{
+		label: "editor", section: "files", key: "editor",
+		choices: choices,
+		value:   func(c config.Config) string { return config.Quote(strings.TrimSpace(c.Files.Editor)) },
+	}}
+}
+
 // settingsState is the screen while it is open.
 type settingsState struct {
 	row int
@@ -225,7 +258,12 @@ func (t *tui) openSettings() error {
 		t.settings = nil
 		t.overlay = nil
 	} else {
-		t.settings = &settingsState{rows: append(append([]settingRow(nil), settingRows...), integrationRows(t.host != "")...)}
+		// The editor goes after the files panel's rows, the integrations at
+		// the end: both are found on this machine when the screen opens.
+		rows := append([]settingRow(nil), settingRows...)
+		at := slices.IndexFunc(rows, func(r settingRow) bool { return r.key == "width" && r.section == "files" }) + 1
+		rows = slices.Insert(rows, at, editorRows(t.host != "", t.config.Files.Editor)...)
+		t.settings = &settingsState{rows: append(rows, integrationRows(t.host != "")...)}
 	}
 	t.dirty = true
 	t.mu.Unlock()

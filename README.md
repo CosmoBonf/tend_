@@ -165,7 +165,9 @@ opens the panel's settings; `?` lists the keys.
   file. Enter opens a file in `$EDITOR` in a tab of its own; space, or a
   click, previews it read-only in a tab of its own with syntax colour —
   markdown rendered (`m` for the source), PNG, JPEG and GIF drawn in the
-  terminal (`tend view` is that preview on its own). `s` stages a file or a folder;
+  terminal (`tend view` is that preview on its own). In the preview, `o`
+  edits the file in the same tab, and saving and quitting the editor comes
+  back to the preview with what was saved. `s` stages a file or a folder;
   `m` or a right-click is the menu: new file or folder, rename, delete (type
   yes), copy the path, open with the system's app, reveal, change folder, a
   file's history. `/` or `ctrl+p` finds a file by name.
@@ -191,7 +193,13 @@ dock = "right"   # or "left"
 follow = true    # follow the pane beside it
 auto_open = true # open in every tab by itself; false: only on prefix+f
 hidden = false   # hide dotfiles
+editor = "micro" # what files and a pane's history open in; "" is $VISUAL, $EDITOR, vi
 ```
+
+The editor is also on the settings screen (`ctrl+b s`, row **editor**), which
+offers the editors installed on the machine: micro, nano, vim, nvim, helix,
+emacs, kakoune and vi, whichever are there. The choice applies to the next file
+opened, with no restart.
 
 `ctrl+b g` is the navigator: every space, tab and pane in one list over the
 screen, each pane with its agent's state. `/` searches by name or directory,

@@ -50,13 +50,13 @@ func runFiles(args []string) error {
 			return err
 		}
 	}
-	if *editor == "" {
-		*editor = server.Editor()
-	}
+	// -editor fixes the editor; without it, it is looked up at each open,
+	// so one chosen on the settings screen is used by a panel already open.
 	opener := &explorer.SessionOpener{
 		Socket: os.Getenv(api.EnvSocketPath),
 		Pane:   os.Getenv(api.EnvPaneID),
 		Editor: *editor,
+		Choose: server.Editor,
 	}
 	m := explorer.New(dir, opener)
 	m.FollowPanes(opener)

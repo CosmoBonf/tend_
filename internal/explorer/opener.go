@@ -25,6 +25,9 @@ type SessionOpener struct {
 	// Editor is the command to edit with, which the file's path is given to
 	// as its last argument by the shell ("$EDITOR" may carry flags).
 	Editor string
+	// Choose names the editor at each open when Editor is empty, so one
+	// chosen on the settings screen is used by a panel already open.
+	Choose func() string
 
 	opened map[string]string
 	seq    atomic.Uint64
@@ -99,6 +102,9 @@ func (o *SessionOpener) Open(path string, line int) error {
 		return errors.New("cannot tell which space this panel is in")
 	}
 	editor := o.Editor
+	if editor == "" && o.Choose != nil {
+		editor = o.Choose()
+	}
 	if editor == "" {
 		editor = "vi"
 	}
