@@ -27,31 +27,37 @@ func (a *attached) openSideBySide(t *testing.T) {
 	a.waitForScreen(t, "the popup", func(s string) bool { return strings.Contains(s, "type to filter") })
 }
 
-// TestAPaneOpenElsewhereIsBroughtBesideAndSentBack is "side by side..." from
-// end to end: a shell in another space, picked from the spaces list, comes
-// beside the pane in view still running what it ran, its emptied space goes,
-// and "send to new tab" on its menu takes it into a tab of its own. If it
-// regresses, two things open at once cannot be seen together without
-// starting one of them again.
-func TestAPaneOpenElsewhereIsBroughtBesideAndSentBack(t *testing.T) {
+// TestSideBySideListsSSHAloneAndAPaneIsSentToATabOfItsOwn: the popup lists
+// the ssh connections and nothing else — a shell in another space is not
+// offered, the owner asked for ssh alone — and "send to new tab" on a pane's
+// menu takes a pane that shares its tab into a tab of its own, still running.
+// If it regresses, the popup offers spaces again, or a pane brought beside
+// cannot be taken back out.
+func TestSideBySideListsSSHAloneAndAPaneIsSentToATabOfItsOwn(t *testing.T) {
+	t.Setenv(sshconn.PathEnv, filepath.Join(t.TempDir(), "ssh.toml"))
 	a := startSession(t, 120, 24)
 	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
 
 	a.send(t, "\x02N")
 	a.waitForScreen(t, "the second space", func(string) bool { return sidebarHas(a.text(), "space 2") })
-	a.send(t, "echo MARK-B-$((6*7))\r")
-	a.waitForScreen(t, "its shell ran", func(s string) bool { return strings.Contains(s, "MARK-B-42") })
 	a.send(t, "\x02(")
-	a.waitForScreen(t, "back in the first space", func(s string) bool { return !strings.Contains(s, "MARK-B-42") })
-	a.send(t, "echo MARK-A-$((6*7))\r")
-	a.waitForScreen(t, "the first shell ran", func(s string) bool { return strings.Contains(s, "MARK-A-42") })
+	a.waitForScreen(t, "back in the first space", func(string) bool { return true })
 
 	a.openSideBySide(t)
-	a.waitForScreen(t, "the other space's pane listed", func(s string) bool { return strings.Contains(s, "space 2 ›") })
-	a.send(t, "\r")
-	a.waitForScreen(t, "both shells side by side, the second space gone", func(s string) bool {
-		return strings.Contains(s, "MARK-A-42") && strings.Contains(s, "MARK-B-42") &&
-			!sidebarHas(s, "space 2") && !strings.Contains(s, "type to filter")
+	a.waitForScreen(t, "the empty ssh list", func(s string) bool { return strings.Contains(s, "no ssh connections saved") })
+	if s := a.text(); strings.Contains(s, "space 2 ›") || strings.Contains(s, "tab spaces/ssh") {
+		t.Errorf("the popup offers spaces:\n%s", s)
+	}
+	a.send(t, "\x1b")
+	a.waitForScreen(t, "the popup closed", func(s string) bool { return !strings.Contains(s, "type to filter") })
+
+	a.send(t, "echo MARK-A-$((6*7))\r")
+	a.waitForScreen(t, "the first shell ran", func(s string) bool { return strings.Contains(s, "MARK-A-42") })
+	a.send(t, "\x02|")
+	a.waitForScreen(t, "two panes", func(s string) bool { return strings.Count(s, "┌") == 2 })
+	a.send(t, "echo MARK-B-$((6*7))\r")
+	a.waitForScreen(t, "both shells side by side", func(s string) bool {
+		return strings.Contains(s, "MARK-A-42") && strings.Contains(s, "MARK-B-42")
 	})
 
 	y := a.lineContaining(t, "MARK-B-42")
@@ -76,7 +82,7 @@ func TestAnSSHConnectionIsBroughtBesideAndStaysKnown(t *testing.T) {
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	var s sshconn.Store
 	s.Put(sshconn.Connection{Name: "box", Host: "box.example"})
-	s.Put(sshconn.Connection{Name: "db", Host: "db.example"})
+	s.Put(sshconn.Connection{Name: "db", Host: "db.example", Group: "work-group"})
 	if err := sshconn.Save(store, s); err != nil {
 		t.Fatal(err)
 	}
@@ -99,11 +105,11 @@ func TestAnSSHConnectionIsBroughtBesideAndStaysKnown(t *testing.T) {
 	})
 
 	a.openSideBySide(t)
-	// The ssh button, as a hand would; the popup opens on the list the
-	// sidebar shows, which is the ssh list here already.
-	by := a.lineContaining(t, "spaces   ssh")
-	a.clickAt(t, columnOfString(a.lines()[by-1], "spaces   ssh")+10, by)
 	a.waitForScreen(t, "the connections", func(s string) bool { return strings.Contains(s, "● open") && strings.Contains(s, "connect") })
+	// The sidebar heads db's group; the popup's row is the name alone.
+	if row := a.lines()[a.lineContaining(t, "connect")-1]; strings.Contains(row, "work-group") {
+		t.Errorf("the popup shows a connection's group, not its name alone: %q", row)
+	}
 	a.send(t, "box\r")
 	a.waitForScreen(t, "box beside the shell", func(s string) bool {
 		return strings.Contains(s, "MARK-A-42") && strings.Contains(s, "FAKE SSH -- box") && !strings.Contains(s, "type to filter")

@@ -75,13 +75,12 @@ is not one already, and draws it.
 A **space** holds tabs, a tab holds panes. Tabs belong to their space, so
 `ctrl+b n` stays where you are and `ctrl+b )` is how you leave.
 
-To see two things already open side by side — an agent in one space and an
-ssh connection in another, say — click **new** at the foot of the sidebar
-and **side by side...** (also on a pane's right-click menu). A window lists
-what is open elsewhere under two buttons, **spaces** and **ssh**; type to
+To see an ssh connection beside what you are working on, click **new** at
+the foot of the sidebar and **side by side...** (also on a pane's
+right-click menu). A window lists your saved ssh connections; type to
 filter, click one (or Enter) and it comes beside the pane you are in, or
-below it (**place: below**, or ctrl+d). It is moved, not copied, and not
-restarted: an agent goes on with its task and ssh stays logged in. A saved
+below it (**place: below**, or ctrl+d). An open one is moved, not copied,
+and not restarted: it stays logged in. A saved
 connection that is not open is opened right there. **send to new tab** on a
 pane's menu puts it back in a tab of its own.
 

@@ -8,12 +8,12 @@ import (
 )
 
 // "side by side...", tend's own and the owner's: the "new" of either list,
-// and a pane's menu, open a popup listing what is open elsewhere — every
-// pane of the other tabs and spaces, and the saved ssh connections — and the
-// one picked is brought beside the pane in view, or below it. It is moved,
-// not copied (a terminal is in one place), and not restarted: an agent goes
-// on with its task, ssh stays logged in. A connection that is not open is
-// opened there. "send to new tab" on a pane's menu is the way back.
+// and a pane's menu, open a popup listing the saved ssh connections, and the
+// one picked is brought beside the pane in view, or below it. An open one is
+// moved, not copied (a terminal is in one place), and not restarted: ssh
+// stays logged in. A connection that is not open is opened there. "send to
+// new tab" on a pane's menu is the way back. The popup listed the panes of
+// the other spaces as well until the owner asked for ssh alone.
 //
 // The popup is this client's, as every popup is; the move is the server's
 // (pane.move), so every client sees the pane where it went.
@@ -39,8 +39,7 @@ func (t *tui) sideBySideFrameLocked() *ui.SideBySide {
 	return &s
 }
 
-// openSideBySide puts the popup up, to bring something beside target, on
-// the list the sidebar is showing.
+// openSideBySide puts the popup up, to bring a connection beside target.
 func (t *tui) openSideBySide(target uint64) {
 	if !t.serverKnows(proto.MethodPaneMove) {
 		t.setMessage("side by side needs the new server: run tend handoff", true)
@@ -55,14 +54,8 @@ func (t *tui) openSideBySide(target uint64) {
 		t.setMessage("side by side: no pane in view to put things beside", true)
 		return
 	}
-	list := ui.SideBySideSpaces
-	if t.ssh.list {
-		list = ui.SideBySideSSH
-	}
 	t.sideBySide = &sideBySideState{target: target, popup: ui.SideBySide{
-		List:   list,
-		Spaces: t.sideBySideSpacesLocked(target),
-		SSH:    t.sideBySideSSHLocked(target),
+		SSH: t.sideBySideSSHLocked(target),
 	}}
 	t.dirty = true
 	t.mu.Unlock()
@@ -77,46 +70,6 @@ func (t *tui) closeSideBySide() {
 	t.wakeUp()
 }
 
-// sideBySideSpacesLocked is every pane that is not in target's tab, by
-// space and tab. The ssh connections' spaces are left to the ssh list, as
-// the sidebar leaves them.
-func (t *tui) sideBySideSpacesLocked(target uint64) []ui.SideBySideEntry {
-	_, here, _ := t.paneWhereLocked(target)
-	panes := make(map[uint64]proto.PaneInfo, len(t.snap.Panes))
-	for _, p := range t.snap.Panes {
-		panes[p.ID] = p
-	}
-	var out []ui.SideBySideEntry
-	for _, w := range t.snap.Workspaces {
-		if w.Group == sshGroup {
-			continue
-		}
-		for i, tab := range w.Tabs {
-			if tab.ID == here {
-				continue
-			}
-			tabLabel := tab.Name
-			if tabLabel == "" {
-				tabLabel = "tab " + itoaInt(i+1)
-			}
-			for j, id := range tab.Panes {
-				p := panes[id]
-				status := ""
-				if s := navState(p); s != "unknown" {
-					status = s
-				}
-				out = append(out, ui.SideBySideEntry{
-					Label:  orDash(w.Name) + " › " + tabLabel + " · " + navigatorPaneLabel(p, j),
-					Meta:   p.Dir,
-					Status: status,
-					Pane:   id,
-				})
-			}
-		}
-	}
-	return out
-}
-
 // sideBySideSSHLocked is every saved connection: an open one is brought as
 // it is, one that is not is opened. One already in target's tab is not
 // offered: it is beside it already.
@@ -125,7 +78,9 @@ func (t *tui) sideBySideSSHLocked(target uint64) []ui.SideBySideEntry {
 	_, here, _ := t.paneWhereLocked(target)
 	var out []ui.SideBySideEntry
 	for _, c := range t.ssh.store.Connections {
-		e := ui.SideBySideEntry{Label: c.Name, Meta: c.Group, Status: "connect", SSH: c.ID}
+		// The name alone, as the ssh list shows it: the owner asked for no
+		// group, host or user beside it.
+		e := ui.SideBySideEntry{Label: c.Name, Status: "connect", SSH: c.ID}
 		if o, open := t.sshOpenLocked(c.ID); open {
 			if _, tab, _ := t.paneWhereLocked(o.pane); tab == here {
 				continue
@@ -154,16 +109,8 @@ func (t *tui) moveSideBySideLocked(delta int) {
 	s.Selected = f[min(max(pos+delta, 0), len(f)-1)]
 }
 
-// switchSideBySideLocked shows the other list, its filter and cursor fresh.
-func (t *tui) switchSideBySideLocked(list int) {
-	s := &t.sideBySide.popup
-	if s.List != list {
-		s.List, s.Query, s.Selected, s.Error = list, "", 0, ""
-	}
-}
-
-// sideBySideKeys: typing filters, the arrows move, tab changes list, enter
-// brings beside and ctrl+d below, esc closes.
+// sideBySideKeys: typing filters, the arrows move, enter brings beside and
+// ctrl+d below, esc closes.
 func (t *tui) sideBySideKeys(data []byte) {
 	for _, key := range splitKeys(data) {
 		t.mu.Lock()
@@ -181,9 +128,6 @@ func (t *tui) sideBySideKeys(data []byte) {
 			below := s.Below || key == "\x04"
 			t.mu.Unlock()
 			t.bringSideBySide(below)
-		case key == "\t" || key == "\x1b[Z":
-			t.switchSideBySideLocked(1 - s.List)
-			t.mu.Unlock()
 		case key == "\x1b[A":
 			t.moveSideBySideLocked(-1)
 			t.mu.Unlock()
@@ -212,8 +156,8 @@ func (t *tui) sideBySideKeys(data []byte) {
 	t.wakeUp()
 }
 
-// sideBySideMouse answers the mouse while the popup is up: a list button
-// shows that list, a placement button chooses beside or below, a click on
+// sideBySideMouse answers the mouse while the popup is up: a placement
+// button chooses beside or below, a click on
 // an entry brings it, a click outside or on × closes.
 func (t *tui) sideBySideMouse(ev ui.MouseEvent) (bool, error) {
 	t.mu.Lock()
@@ -233,8 +177,6 @@ func (t *tui) sideBySideMouse(ev ui.MouseEvent) (bool, error) {
 		switch {
 		case !hit.Inside || hit.Close:
 			t.sideBySide = nil
-		case hit.List >= 0:
-			t.switchSideBySideLocked(hit.List)
 		case hit.Place >= 0:
 			s.Below = hit.Place == 1
 		case hit.Entry >= 0:
