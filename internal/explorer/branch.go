@@ -199,10 +199,19 @@ type branchPicker struct {
 func (b *branchPicker) match() {
 	b.shown = b.shown[:0]
 	q := strings.ToLower(b.filter)
+	name := strings.TrimSpace(b.filter)
+	taken := name == ""
 	for _, br := range b.all {
 		if strings.Contains(strings.ToLower(br.Name), q) {
 			b.shown = append(b.shown, br)
 		}
+		// A remote branch of that name is offered as itself, which tracks
+		// it; making a second one beside it would not.
+		taken = taken || br.Name == name || br.Remote && br.Name[strings.Index(br.Name, "/")+1:] == name
+	}
+	// Last, so typing the start of a branch that exists still lands on it.
+	if !taken {
+		b.shown = append(b.shown, Branch{Name: name, New: true})
 	}
 	b.cursor = min(b.cursor, max(len(b.shown)-1, 0))
 }
@@ -261,6 +270,7 @@ func (m *Model) switchTo() {
 		return
 	}
 	if err := m.git.Switch(br); err != nil {
+		// git's own words: a name it refuses says why.
 		m.fail(err)
 		return
 	}
@@ -296,7 +306,7 @@ func branchTop(m *Model) int { return max(m.branches.cursor-m.listRows()+1, 0) }
 
 func (m *Model) drawBranches(g *vt.Grid) (int, int, bool) {
 	b := &m.branches
-	put(g, 1, 0, "switch branch", styleAccent, m.cols)
+	put(g, 1, 0, "switch branch · type a new name to create one", styleAccent, m.cols)
 	x := put(g, 1, 1, "› ", styleAccent, m.cols)
 	cx := put(g, x, 1, truncate(b.filter, m.cols-x-1), styleNormal, m.cols)
 	top := branchTop(m)
@@ -311,19 +321,22 @@ func (m *Model) drawBranches(g *vt.Grid) (int, int, bool) {
 		if br.Remote {
 			style = styleDim
 		}
-		mark := "  "
-		if br.Current {
+		mark, name := "  ", br.Name
+		switch {
+		case br.Current:
 			mark, style = "● ", styleGreen
+		case br.New:
+			mark, name, style = "+ ", "create branch \""+br.Name+"\"", styleAccent
 		}
 		if at == b.cursor {
 			fill(g, y, 0, m.cols, styleSel)
 			style = styleSel
 		}
-		put(g, 1, y, mark+truncate(br.Name, m.cols-4), style, m.cols)
+		put(g, 1, y, mark+truncate(name, m.cols-4), style, m.cols)
 	}
 	if len(b.shown) == 0 {
 		put(g, 2, 2, "no branch matches", styleDim, m.cols)
 	}
-	put(g, 1, m.rows-1, truncate("enter switch  esc", m.cols-2), styleDim, m.cols)
+	put(g, 1, m.rows-1, truncate("enter switch or create  esc", m.cols-2), styleDim, m.cols)
 	return cx, 1, true
 }

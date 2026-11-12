@@ -114,3 +114,43 @@ func TestTheBranchPickerSwitchesAndTracksARemoteBranch(t *testing.T) {
 		t.Errorf("the bar should say the new branch:\n%s", text)
 	}
 }
+
+// TestTheBranchPickerCreatesABranchOfANameTyped: a name no branch has is
+// offered as "create branch", last, and enter makes it from what is checked
+// out and switches to it, uncommitted changes and all; a name a branch has,
+// here or on origin, is not offered again. If it regresses, a new branch
+// means leaving the panel for a shell.
+func TestTheBranchPickerCreatesABranchOfANameTyped(t *testing.T) {
+	work, _ := remoteAndClone(t)
+	write(t, work, "a.txt", "changed\n")
+	m := New(work, nil)
+	screen(m, 50, 12)
+	type_ := func(s string) {
+		for _, r := range s {
+			m.Key(Key{Name: string(r), Rune: r})
+		}
+	}
+
+	keys(m, "B")
+	type_("feature")
+	if text := screen(m, 50, 12); strings.Contains(text, "create branch") {
+		t.Errorf("feature is on origin; offered to create it again:\n%s", text)
+	}
+	keys(m, "esc")
+
+	keys(m, "B")
+	type_("fix/login")
+	if text := screen(m, 50, 12); !strings.Contains(text, `+ create branch "fix/login"`) {
+		t.Fatalf("no offer to create fix/login:\n%s", text)
+	}
+	keys(m, "enter")
+	if head := gitIn(t, work, "branch", "--show-current"); strings.TrimSpace(head) != "fix/login" {
+		t.Fatalf("on %q (panel says %q)", head, m.message)
+	}
+	if st := gitIn(t, work, "status", "--porcelain"); !strings.Contains(st, "a.txt") {
+		t.Errorf("the uncommitted change did not come along: %q", st)
+	}
+	if text := screen(m, 50, 12); !strings.Contains(text, "fix/login") {
+		t.Errorf("the bar should say the new branch:\n%s", text)
+	}
+}

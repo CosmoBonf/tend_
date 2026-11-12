@@ -327,6 +327,9 @@ type Branch struct {
 	Name    string
 	Remote  bool
 	Current bool
+	// New is the picker's offer to make a branch of the name typed, from
+	// what is checked out: the owner's, herdr's picker only switches.
+	New bool
 }
 
 // Branches lists the local branches, then the remote ones that no local
@@ -373,8 +376,13 @@ func (g Git) Branches() ([]Branch, error) {
 }
 
 // Switch changes to a branch. A remote one becomes a local branch of the
-// same name that tracks it, as an editor's branch picker does.
+// same name that tracks it, as an editor's branch picker does; a new one is
+// made from what is checked out, taking uncommitted changes along.
 func (g Git) Switch(b Branch) error {
+	if b.New {
+		_, err := g.run("switch", "-c", b.Name)
+		return err
+	}
 	if b.Remote {
 		local := b.Name[strings.Index(b.Name, "/")+1:]
 		_, err := g.run("switch", "-c", local, "--track", b.Name)

@@ -187,7 +187,7 @@ opens the panel's settings; `?` lists the keys.
   discards, `c` commits, `A` drafts the message with the local `claude`
   (haiku), or from the file names without it.
 - **git bar** — the line under the header: click the branch (or `B`) to
-  switch, `⟳` (or `P`) to sync — pull when behind, fast-forward only, push
+  switch, or type a name no branch has to create it there and switch to it, `⟳` (or `P`) to sync — pull when behind, fast-forward only, push
   when ahead, publish a new branch to origin — without ever asking for a
   password on the panel. `L` is the history: commits, stashes (apply, pop,
   drop) and tags, each with its diff.
