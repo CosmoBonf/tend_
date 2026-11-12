@@ -53,3 +53,48 @@ func TestThePanelsStatusTakesNoLockOnTheIndex(t *testing.T) {
 		t.Error("reading the status wrote the index, under its lock")
 	}
 }
+
+// TestTheBranchFirstByNameIsListedWhenAnotherIsCurrent: on main, a branch
+// named before it — develop — is in the picker as the local branch it is,
+// and switching to it works. If it regresses, the first branch drops out of
+// the list, its origin/ copy stands in, and picking that fails with "a
+// branch named 'develop' already exists", as it did for the owner.
+func TestTheBranchFirstByNameIsListedWhenAnotherIsCurrent(t *testing.T) {
+	dir := t.TempDir()
+	env := append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		cmd.Env = env
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	git("init", "-q", "-b", "main")
+	git("commit", "-q", "--allow-empty", "-m", "a")
+	git("branch", "develop")
+	// A remote copy of both, as a clone has.
+	git("update-ref", "refs/remotes/origin/develop", "HEAD")
+	git("update-ref", "refs/remotes/origin/main", "HEAD")
+
+	repo := FindRepo(dir)
+	branches, err := repo.Branches()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var develop *Branch
+	for i, b := range branches {
+		if b.Name == "origin/develop" {
+			t.Errorf("origin/develop listed beside the local develop: %+v", branches)
+		}
+		if b.Name == "develop" {
+			develop = &branches[i]
+		}
+	}
+	if develop == nil || develop.Remote {
+		t.Fatalf("develop is not listed as a local branch: %+v", branches)
+	}
+	if err := repo.Switch(*develop); err != nil {
+		t.Fatalf("switching to develop: %v", err)
+	}
+}

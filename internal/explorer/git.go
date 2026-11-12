@@ -338,7 +338,12 @@ func (g Git) Branches() ([]Branch, error) {
 	}
 	var local, remote []Branch
 	have := map[string]bool{}
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+	// Only the end is trimmed: the first line of a branch that is not the
+	// current one starts with the blank %(HEAD), and trimming it took two
+	// letters of the name instead. On main, develop — first by name — went
+	// missing, origin/develop stood in for it, and picking that tried to
+	// create a develop that was already there.
+	for _, line := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
 		if len(line) < 3 {
 			continue
 		}
