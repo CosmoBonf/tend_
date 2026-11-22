@@ -195,6 +195,15 @@ opens the panel's settings; `?` lists the keys.
   when ahead, publish a new branch to origin — without ever asking for a
   password on the panel. `L` is the history: commits, stashes (apply, pop,
   drop) and tags, each with its diff.
+- **CI** — beside the branch, how the commit checked out stands on GitHub
+  Actions: `CI ✓` passed, `CI ✗` failed, `CI ●` running, `CI –` no run of
+  this commit yet. A click (or `C`) lists the branch's runs; Enter opens a
+  run on its jobs and a job on its steps, as they move while it runs, and
+  Enter on a step shows the job's log, at its first error. `r` runs again
+  what failed, `o` opens the run on github.com. When a run you saw running
+  ends, the panel says so, and the desktop is told once. It is asked of the
+  GitHub CLI (`gh`), with its login: **menu** → **GitHub account...** signs
+  in through the browser, or adds or switches accounts.
 
 Its settings are `[files]` in the settings file, and on the settings screen:
 
@@ -251,6 +260,10 @@ you alone; a password is in it as typed, and ssh is given it by tend through
 `SSH_ASKPASS`, never on a command line. A connection with a password trusts a
 machine it has never seen (`StrictHostKeyChecking=accept-new`; a key that
 changed is still refused) and works in a session on this machine.
+
+A connection's space has no files panel of its own: it would list this
+machine's files beside the other machine's shell. `ctrl+b f` opens one
+there anyway, and it stays.
 
 ### more than one account of an agent
 

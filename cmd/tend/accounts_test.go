@@ -4,6 +4,7 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -22,6 +23,15 @@ import (
 // Code's login.
 func TestAnAgentIsStartedOnAnAccountAddedFromTheMenu(t *testing.T) {
 	home, bin := t.TempDir(), t.TempDir()
+	// Go's own directories stay where they are: they default to under
+	// HOME, and on GitHub's runner something the session started ran go
+	// with this HOME, filling it with a module cache whose read-only files
+	// the test's cleanup could not remove.
+	for _, v := range []string{"GOPATH", "GOMODCACHE", "GOCACHE"} {
+		if out, err := exec.Command("go", "env", v).Output(); err == nil {
+			t.Setenv(v, strings.TrimSpace(string(out)))
+		}
+	}
 	t.Setenv("HOME", home)
 	fake := "#!/bin/sh\ncase \"$1\" in --version) echo 9.9.9; exit 0;; esac\necho \"FAKE AGENT HOME=$CLAUDE_CONFIG_DIR\"\n"
 	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(fake), 0o755); err != nil {
