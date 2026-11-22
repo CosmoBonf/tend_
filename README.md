@@ -171,7 +171,11 @@ and it follows the pane beside it to whatever project that pane moves to
 opens the panel's settings; `?` lists the keys.
 
 - **files** — the project as a tree, with git's letter beside each changed
-  file. Enter opens a file in `$EDITOR` in a tab of its own; space, or a
+  file, coloured by the step it still has to take to the remote: yellow is
+  not added yet (`U` new, `M` changed), green is added and waiting for a
+  commit, blue `↑` is committed and not pushed, red is deleted, magenta a
+  conflict; no colour is on the remote. A folder takes the colour of what
+  inside it is furthest behind. `?` has the legend. Enter opens a file in `$EDITOR` in a tab of its own; space, or a
   click, previews it read-only in a tab of its own with syntax colour —
   markdown rendered (`m` for the source), PNG, JPEG and GIF drawn in the
   terminal (`tend view` is that preview on its own). In the preview, `o`

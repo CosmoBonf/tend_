@@ -28,27 +28,40 @@ var (
 	styleRed     = vt.Style{FG: vt.IndexedColor(1)}
 	styleCyan    = vt.Style{FG: vt.IndexedColor(6)}
 	styleMagenta = vt.Style{FG: vt.IndexedColor(5), Attrs: vt.AttrBold}
+	styleBlue    = vt.Style{FG: vt.IndexedColor(4)}
 	// styleProject is the project's name over the tree, herdr-sidebar's
 	// header_accent: LightBlue, bold.
 	styleProject = vt.Style{FG: vt.IndexedColor(12), Attrs: vt.AttrBold}
 )
 
-// letterStyle is the colour of a git letter, as source-control views colour
-// them: new is green, changed yellow, gone red, moved cyan, stuck magenta.
-func letterStyle(letter byte) vt.Style {
-	switch letter {
-	case 'U', 'A', '?':
-		return styleGreen
-	case 'M', 'T':
-		return styleYellow
-	case 'D':
-		return styleRed
-	case 'R', 'C':
-		return styleCyan
-	case '!':
+// stageStyle is the colour of a stage: not added yellow, added green,
+// committed and not pushed blue, gone red, stuck magenta.
+func stageStyle(s Stage) vt.Style {
+	switch s {
+	case StageConflict:
 		return styleMagenta
+	case StageUnstaged:
+		return styleYellow
+	case StageDeleted:
+		return styleRed
+	case StageStaged:
+		return styleGreen
+	case StageAhead:
+		return styleBlue
 	}
 	return styleNormal
+}
+
+// stageLegend is what each colour means, at the top of the help.
+var stageLegend = []struct {
+	stage Stage
+	text  string
+}{
+	{StageUnstaged, "  U M   new or changed: git add is missing"},
+	{StageStaged, "  A M   added: the commit is missing"},
+	{StageAhead, "  ↑     committed: the push is missing (⟳)"},
+	{StageDeleted, "  D     deleted"},
+	{StageConflict, "  !     conflict"},
 }
 
 // Draw paints the explorer into g, which is the size of the pane. It
@@ -239,13 +252,13 @@ func (m *Model) drawFileRow(g *vt.Grid, y int, n *Node, selected bool) {
 	if selected {
 		fill(g, y, 0, m.cols, styleSel)
 	}
-	letter := m.statusFor(n)
+	letter, stage := m.statusFor(n)
 	nameStyle := styleNormal
 	switch {
 	case n.Ignored:
 		nameStyle = styleDim
-	case letter != 0:
-		nameStyle = letterStyle(letter)
+	case stage != StageNone:
+		nameStyle = stageStyle(stage)
 	}
 
 	x := 2 * n.Depth
@@ -266,16 +279,12 @@ func (m *Model) drawFileRow(g *vt.Grid, y int, n *Node, selected bool) {
 	}
 	// The name yields to the letter and the two cells after it.
 	limit := m.cols - 4
-	if letter == 0 || n.Ignored {
+	if letter == "" || n.Ignored {
 		limit = m.cols
 	}
 	put(g, x, y, truncate(name, limit-x), sel(nameStyle), limit)
-	if letter != 0 && !n.Ignored {
-		shown := string(letter)
-		if n.Dir {
-			shown = "●"
-		}
-		put(g, m.cols-3, y, shown, sel(vt.Style{FG: letterStyle(letter).FG, Attrs: vt.AttrBold}), m.cols)
+	if letter != "" && !n.Ignored {
+		put(g, m.cols-3, y, letter, sel(vt.Style{FG: stageStyle(stage).FG, Attrs: vt.AttrBold}), m.cols)
 	}
 }
 
@@ -327,7 +336,16 @@ func (m *Model) drawChanges(g *vt.Grid) {
 			letter = '!'
 		}
 		selected := at == m.cursor[v]
-		nameStyle, dirStyle, letterSt := styleNormal, styleDim, letterStyle(letter)
+		// Coloured by the half it is in: a row in the staged half is added,
+		// whatever the same file has unstaged beside it.
+		stage := c.Stage()
+		if r.staged && stage != StageConflict {
+			stage = StageStaged
+			if c.Index == 'D' {
+				stage = StageDeleted
+			}
+		}
+		nameStyle, dirStyle, letterSt := styleNormal, styleDim, stageStyle(stage)
 		if isDeleted(c) && !r.staged || r.staged && c.Index == 'D' {
 			nameStyle = vt.Style{Attrs: vt.AttrStrike}
 		}
@@ -380,15 +398,23 @@ var helpLines = []string{
 }
 
 func (m *Model) drawHelp(g *vt.Grid) {
+	row := 0
+	if m.listRows() > len(stageLegend)+1 {
+		put(g, 1, 2, "colours", styleAccent, m.cols)
+		for i, l := range stageLegend {
+			put(g, 1, 3+i, truncate(l.text, m.cols-2), stageStyle(l.stage), m.cols)
+		}
+		row = len(stageLegend) + 1
+	}
 	for i, line := range helpLines {
-		if i >= m.listRows() {
+		if row+i >= m.listRows() {
 			break
 		}
 		style := styleNormal
 		if !strings.HasPrefix(line, " ") {
 			style = styleAccent
 		}
-		put(g, 1, 2+i, truncate(line, m.cols-2), style, m.cols)
+		put(g, 1, 2+row+i, truncate(line, m.cols-2), style, m.cols)
 	}
 }
 

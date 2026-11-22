@@ -101,34 +101,29 @@ func (m *Model) repoOf(rel string) int {
 	return best
 }
 
-// statusFor is the git letter of a tree entry, from whichever repository
-// it is in.
-func (m *Model) statusFor(n *Node) byte {
+// statusFor is what a tree entry shows of git, from whichever repository
+// it is in: the letter at the right edge, and the stage it is coloured by.
+// A folder shows a dot; a file committed and not pushed, an arrow.
+func (m *Model) statusFor(n *Node) (string, Stage) {
 	i := m.repoOf(n.Rel)
 	if i < 0 || m.repos[i].status == nil {
-		return 0
+		return "", StageNone
 	}
 	st, g := m.repos[i].status, m.repos[i].git
 	rel := m.tree.repoPath(g, n.Rel)
-	if rel == "." {
-		// A repository's own folder, in a folder of them: marked when it
-		// holds any change, as any folder is.
-		if len(st.Changes) > 0 {
-			return st.Changes[0].Letter()
-		}
-		return 0
+	// A repository's own folder, in a folder of them, is marked as any
+	// folder is.
+	stage := st.StageOf(rel, n.Dir || rel == ".")
+	switch {
+	case stage == StageNone:
+		return "", StageNone
+	case n.Dir || rel == ".":
+		return "●", stage
+	case stage == StageAhead:
+		return "↑", stage
 	}
-	if n.Dir {
-		letter := st.DirLetter(rel)
-		if c, ok := st.Of(rel); ok {
-			letter = c.Letter() // an untracked directory is one change
-		}
-		return letter
-	}
-	if c, ok := st.Of(rel); ok {
-		return c.Letter()
-	}
-	return 0
+	c, _ := st.Of(rel)
+	return string(c.Letter()), stage
 }
 
 // syncActive makes the repository of the selection the active one.

@@ -43,6 +43,41 @@ func (c Change) Conflicted() bool {
 	return c.Index == 'U' || c.Work == 'U' || pair == "AA" || pair == "DD"
 }
 
+// Stage is how far a change is from being on the remote, which is what the
+// tree colours by — the owner's: one colour for each step a change still has
+// to take, so a glance says whether git add, a commit or a push is missing.
+// The order is the rank a folder takes from what is inside it: the change
+// furthest behind wins.
+type Stage int
+
+const (
+	StageNone Stage = iota
+	// StageAhead is committed and not pushed yet.
+	StageAhead
+	// StageStaged is added, and waiting for a commit.
+	StageStaged
+	// StageDeleted is gone from the disk, staged or not.
+	StageDeleted
+	// StageUnstaged is new or changed, and not added yet.
+	StageUnstaged
+	StageConflict
+)
+
+// Stage is the step this change has still to take.
+func (c Change) Stage() Stage {
+	switch {
+	case c.Conflicted():
+		return StageConflict
+	case c.Index == 'D' || c.Work == 'D':
+		return StageDeleted
+	case c.Untracked() || c.Work != ' ':
+		return StageUnstaged
+	case c.Index != ' ':
+		return StageStaged
+	}
+	return StageNone
+}
+
 // Letter is the one letter the explorer shows for a path, as an editor's
 // source-control view does: the working tree's news first, since that is
 // what was touched most recently.
@@ -61,12 +96,16 @@ func (c Change) Letter() byte {
 
 // Status is the repository as `git status` sees it.
 type Status struct {
-	Branch         string
-	Upstream       string
-	Ahead, Behind  int
-	Changes        []Change
-	byPath         map[string]Change
-	dirtyDirs      map[string]byte
+	Branch        string
+	Upstream      string
+	Ahead, Behind int
+	Changes       []Change
+	byPath        map[string]Change
+	dirtyDirs     map[string]byte
+	dirStages     map[string]Stage
+	// unpushed is the files committed here and not on the remote yet, with
+	// no change on top of that.
+	unpushed       map[string]bool
 	detachedOrNone bool
 }
 
@@ -87,12 +126,64 @@ func (s *Status) DirLetter(dir string) byte {
 	return s.dirtyDirs[dir]
 }
 
+// StageOf is the step a path has still to take: a file's own, a folder's
+// the furthest behind inside it. "." is the whole repository.
+func (s *Status) StageOf(path string, dir bool) Stage {
+	if s == nil {
+		return StageNone
+	}
+	if c, ok := s.byPath[path]; ok {
+		return c.Stage() // an untracked directory is one change
+	}
+	if path == "." {
+		worst := StageNone
+		for _, st := range s.dirStages {
+			worst = max(worst, st)
+		}
+		for p := range s.unpushed {
+			if !strings.Contains(p, "/") {
+				worst = max(worst, StageAhead)
+			}
+		}
+		for _, c := range s.Changes {
+			worst = max(worst, c.Stage())
+		}
+		return worst
+	}
+	if dir {
+		return s.dirStages[path]
+	}
+	if s.unpushed[path] {
+		return StageAhead
+	}
+	return StageNone
+}
+
+// markDirs raises every folder above path to at least stage.
+func (s *Status) markDirs(path string, stage Stage) {
+	for dir := filepath.ToSlash(filepath.Dir(path)); dir != "." && dir != "/"; dir = filepath.ToSlash(filepath.Dir(dir)) {
+		s.dirStages[dir] = max(s.dirStages[dir], stage)
+	}
+}
+
+// markUnpushed records the files of the commits not pushed yet. One changed
+// again since is shown as that change, which is further behind.
+func (s *Status) markUnpushed(paths []string) {
+	for _, p := range paths {
+		if _, changed := s.byPath[p]; changed {
+			continue
+		}
+		s.unpushed[p] = true
+		s.markDirs(p, StageAhead)
+	}
+}
+
 // parseStatus reads `git status --porcelain=v2 --branch -z`.
 //
 // Version 2 because it says the upstream and ahead/behind on header lines,
 // and version 1 hides them in a string meant for people.
 func parseStatus(out []byte) *Status {
-	st := &Status{byPath: map[string]Change{}, dirtyDirs: map[string]byte{}}
+	st := &Status{byPath: map[string]Change{}, dirtyDirs: map[string]byte{}, dirStages: map[string]Stage{}, unpushed: map[string]bool{}}
 	fields := bytes.Split(out, []byte{0})
 	for i := 0; i < len(fields); i++ {
 		line := string(fields[i])
@@ -158,6 +249,7 @@ func (s *Status) add(c Change) {
 	s.Changes = append(s.Changes, c)
 	s.byPath[c.Path] = c
 	letter := c.Letter()
+	s.markDirs(c.Path, c.Stage())
 	for dir := filepath.ToSlash(filepath.Dir(c.Path)); dir != "." && dir != "/"; dir = filepath.ToSlash(filepath.Dir(dir)) {
 		// A conflict inside outranks everything else, then any change.
 		if prev := s.dirtyDirs[dir]; prev != '!' {
@@ -220,7 +312,44 @@ func (g Git) Status() (*Status, error) {
 	if err != nil {
 		return nil, err
 	}
-	return parseStatus(out), nil
+	st := parseStatus(out)
+	st.markUnpushed(g.unpushed(st))
+	return st, nil
+}
+
+// unpushed is the files the commits not on the remote touch: those ahead
+// of the upstream, or, on a branch never pushed, those on no remote branch.
+// A repository with no remote has nowhere to push, and nothing is listed.
+// It costs a git call only when there is something to push.
+func (g Git) unpushed(st *Status) []string {
+	var out []byte
+	var err error
+	switch {
+	case st.Upstream != "" && st.Ahead > 0:
+		// Three dots: what HEAD changed since it left the upstream, not
+		// what the upstream changed since, which a pull brings.
+		out, err = g.run("diff", "--name-only", "-z", "@{upstream}...HEAD")
+	case st.Upstream == "" && st.Branch != "" && !st.detachedOrNone:
+		if remotes, _ := g.run("remote"); len(bytes.TrimSpace(remotes)) == 0 {
+			return nil
+		}
+		out, err = g.run("log", "--format=", "--name-only", "-z", "HEAD", "--not", "--remotes")
+	default:
+		return nil
+	}
+	if err != nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var paths []string
+	for _, f := range bytes.Split(out, []byte{0}) {
+		p := strings.TrimSpace(string(f))
+		if p != "" && !seen[p] {
+			seen[p] = true
+			paths = append(paths, p)
+		}
+	}
+	return paths
 }
 
 // Ignored reports which of the given paths (relative to the top) git

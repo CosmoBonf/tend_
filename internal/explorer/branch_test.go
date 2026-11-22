@@ -154,3 +154,70 @@ func TestTheBranchPickerCreatesABranchOfANameTyped(t *testing.T) {
 		t.Errorf("the bar should say the new branch:\n%s", text)
 	}
 }
+
+// TestEachStepToTheRemoteHasItsOwnStage: a file not added, one added, one
+// committed and not pushed, and one pushed are told apart — the owner could
+// not see whether git add had worked, nor that a commit was still waiting
+// for a push — and a folder takes the step furthest behind inside it. If it
+// regresses, untracked and staged look the same, and a commit not pushed
+// looks like one that was.
+func TestEachStepToTheRemoteHasItsOwnStage(t *testing.T) {
+	work, _ := remoteAndClone(t)
+	write(t, work, "pushed/p.txt", "p\n")
+	gitIn(t, work, "add", "-A")
+	gitIn(t, work, "commit", "-q", "-m", "p")
+	gitIn(t, work, "push", "-q")
+
+	write(t, work, "sent/c.txt", "c\n")
+	gitIn(t, work, "add", "-A")
+	gitIn(t, work, "commit", "-q", "-m", "c")
+	write(t, work, "mixed/added.txt", "a\n")
+	gitIn(t, work, "add", "mixed/added.txt")
+	write(t, work, "mixed/new.txt", "n\n")
+	write(t, work, "a.txt", "changed\n")
+	gitIn(t, work, "add", "a.txt")
+
+	st, err := FindRepo(work).Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		path string
+		dir  bool
+		want Stage
+	}{
+		{"pushed/p.txt", false, StageNone},
+		{"pushed", true, StageNone},
+		{"sent/c.txt", false, StageAhead},
+		{"sent", true, StageAhead},
+		{"a.txt", false, StageStaged},
+		{"mixed/added.txt", false, StageStaged},
+		{"mixed/new.txt", false, StageUnstaged},
+		{"mixed", true, StageUnstaged},
+		{".", true, StageUnstaged},
+	} {
+		if got := st.StageOf(c.path, c.dir); got != c.want {
+			t.Errorf("%s: stage %d, want %d", c.path, got, c.want)
+		}
+	}
+
+	// Pushed, the arrow goes.
+	gitIn(t, work, "push", "-q")
+	st, _ = FindRepo(work).Status()
+	if got := st.StageOf("sent/c.txt", false); got != StageNone {
+		t.Errorf("sent/c.txt pushed, still stage %d", got)
+	}
+
+	// A branch never pushed lists what it committed as not pushed.
+	gitIn(t, work, "switch", "-q", "-c", "agent/x")
+	write(t, work, "x.txt", "x\n")
+	gitIn(t, work, "add", "-A")
+	gitIn(t, work, "commit", "-q", "-m", "x")
+	st, _ = FindRepo(work).Status()
+	if got := st.StageOf("x.txt", false); got != StageAhead {
+		t.Errorf("x.txt on a branch never pushed: stage %d", got)
+	}
+	if text := screen(New(work, nil), 40, 12); !strings.Contains(text, "x.txt") || !strings.Contains(text, "↑") {
+		t.Errorf("the tree should mark x.txt with an arrow:\n%s", text)
+	}
+}
