@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/auth-com-br/tend/internal/pty"
+	"github.com/auth-com-br/tend/internal/sshconn"
 	"github.com/auth-com-br/tend/internal/vt"
 )
 
@@ -466,4 +467,53 @@ func TestThePanelOpensInEveryTabUnlessClosedThere(t *testing.T) {
 	a.waitForScreen(t, "a new tab, with its panel", func(s string) bool {
 		return strings.Contains(s, "tab 2") && panel(s)
 	})
+}
+
+// TestAnSSHConnectionsSpaceHasNoFilesPanelUnlessAskedFor: with the panel
+// opening in every tab, a space the ssh list opens for a connection gets
+// none — it would show this machine's files beside the other machine's
+// shell, in the width a wide lxc list needs — and prefix+f still opens one
+// there, which then stays. If it regresses, every connection opens beside
+// a panel of the wrong machine's files, as the owner's did.
+func TestAnSSHConnectionsSpaceHasNoFilesPanelUnlessAskedFor(t *testing.T) {
+	t.Setenv("PATH", filepath.Dir(buildBinary(t))+string(os.PathListSeparator)+os.Getenv("PATH"))
+	bin, store := t.TempDir(), filepath.Join(t.TempDir(), "ssh.toml")
+	if err := os.WriteFile(filepath.Join(bin, "ssh"), []byte("#!/bin/sh\necho \"FAKE SSH $*\"\nexec sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	var s sshconn.Store
+	s.Put(sshconn.Connection{Name: "box", Host: "box.example"})
+	if err := sshconn.Save(store, s); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(sshconn.PathEnv, store)
+	cfg := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(cfg, []byte("[files]\nauto_open = true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	withConfig(t, cfg)
+
+	a := startSession(t, 140, 30)
+	panel := func(s string) bool { return strings.Contains(s, " files ─") }
+	a.waitForScreen(t, "the panel in the first space", panel)
+
+	a.clickText(t, "⇄ ssh")
+	a.waitForScreen(t, "the ssh list", func(string) bool { return strings.Contains(a.sidebarText(), "○ box") })
+	a.clickAt(t, 5, a.lineContaining(t, "○ box"))
+	a.clickAt(t, 5, a.lineContaining(t, "○ box"))
+	a.waitForScreen(t, "box open", func(s string) bool { return strings.Contains(s, "FAKE SSH -- box") })
+	// Absence has no event to wait for: long enough for the panel, which
+	// opened within a frame or two in the first space, to have come.
+	time.Sleep(1500 * time.Millisecond)
+	if screen := strings.Join(a.lines(), "\n"); panel(screen) {
+		t.Fatalf("the connection's space got a files panel:\n%s", screen)
+	}
+
+	a.send(t, "\x02f")
+	a.waitForScreen(t, "the panel, asked for", panel)
+	time.Sleep(time.Second)
+	if !panel(strings.Join(a.lines(), "\n")) {
+		t.Fatal("a panel opened by hand in the connection's space was put away")
+	}
 }

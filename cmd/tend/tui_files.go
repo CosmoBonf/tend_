@@ -56,8 +56,13 @@ func (t *tui) toggleFiles() error {
 	}
 
 	t.mu.Lock()
-	// Opened by hand: the tab is back to having it on its own.
+	// Opened by hand: the tab is back to having it on its own, and keeps
+	// it even where it would not open by itself (an ssh connection's).
 	delete(t.filesSnoozed, t.tab)
+	if t.filesByHand == nil {
+		t.filesByHand = map[uint64]bool{}
+	}
+	t.filesByHand[t.tab] = true
 	share, onRight := t.filesShareLocked(right-left), !t.config.FilesOnLeft()
 	t.mu.Unlock()
 	created, err := t.client.DockPane(focus, share, onRight, proto.PaneSpec{Command: filesCommand, Title: filesTitle})
@@ -102,6 +107,17 @@ func (t *tui) snoozeFilesLocked(tab uint64) {
 // ensureFiles docks the panel in the tab shown when it should have one.
 // Called after each refresh, which is when the tab shown or its panes may
 // have changed.
+// sshSpaceLocked is whether the space in view is an ssh connection's, one
+// of the ssh group's that the ssh list opens.
+func (t *tui) sshSpaceLocked() bool {
+	for _, w := range t.snap.Workspaces {
+		if w.ID == t.workspace {
+			return w.Group == sshGroup
+		}
+	}
+	return false
+}
+
 func (t *tui) ensureFiles() {
 	t.mu.Lock()
 	tab, focus := t.tab, t.focus
@@ -118,11 +134,38 @@ func (t *tui) ensureFiles() {
 		}
 		right = max(right, r.X+r.Cols)
 	}
-	has := false
+	has, panel := false, uint64(0)
 	for _, p := range t.snap.Panes {
 		if inTab[p.ID] && p.Title == filesTitle {
-			has = true
+			has, panel = true, p.ID
 		}
+	}
+	// An ssh connection's space works on the other machine, and the panel
+	// would show this one's files beside it, taking the width a wide table
+	// of lxc list or docker ps needs (the owner's report): it does not open
+	// there by itself, and one that did, before this, is put away. One
+	// opened by hand stays.
+	if t.sshSpaceLocked() && !t.filesByHand[tab] {
+		if !has || t.filesEnsuring[tab] {
+			t.mu.Unlock()
+			return
+		}
+		// Once, not on every frame until the snapshot says it is gone.
+		if t.filesEnsuring == nil {
+			t.filesEnsuring = map[uint64]bool{}
+		}
+		t.filesEnsuring[tab] = true
+		t.mu.Unlock()
+		go func() {
+			err := t.client.ClosePane(panel)
+			if err == nil {
+				_ = t.refresh()
+			}
+			t.mu.Lock()
+			delete(t.filesEnsuring, tab)
+			t.mu.Unlock()
+		}()
+		return
 	}
 	if t.filesHad == nil {
 		t.filesHad = map[uint64]bool{}

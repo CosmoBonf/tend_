@@ -245,10 +245,12 @@ type tui struct {
 	draggingSidebarWidth bool
 	lastEdgeClick        time.Time
 	// The files panel in every tab (tui_files.go): the tabs it was closed
-	// in, the tabs it was last seen in, and the docks under way.
+	// in, the tabs it was last seen in, the docks under way, and the tabs
+	// it was opened in by hand.
 	filesSnoozed  map[uint64]bool
 	filesHad      map[uint64]bool
 	filesEnsuring map[uint64]bool
+	filesByHand   map[uint64]bool
 	// toolbarHover is the tool under the pointer (tui_toolbar.go).
 	toolbarHover string
 	// folded names the groups shut in this client's sidebar. Which groups a
