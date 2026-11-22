@@ -77,6 +77,9 @@ func Run(m *Model, in *os.File, out io.Writer) error {
 	results := make(chan SearchResult, 1)
 	// A push or a pull the same way, so a slow remote holds nothing up.
 	jobs := make(chan func(*Model), 1)
+	// The CI's own, so reading the runs never holds a push up, nor waits
+	// behind one.
+	ciJobs := make(chan func(*Model), 1)
 	cancel := func() {}
 	defer func() { cancel() }()
 	poll := time.NewTicker(50 * time.Millisecond)
@@ -88,6 +91,9 @@ func Run(m *Model, in *os.File, out io.Writer) error {
 		case <-poll.C:
 			if job, ok := m.JobDue(); ok {
 				go func() { jobs <- job() }()
+			}
+			if job, ok := m.CIDue(time.Now()); ok {
+				go func() { ciJobs <- job() }()
 			}
 			req, ok := m.SearchDue(time.Now())
 			if !ok {
@@ -109,6 +115,8 @@ func Run(m *Model, in *os.File, out io.Writer) error {
 			m.ApplySearch(r)
 		case apply := <-jobs:
 			m.ApplyJob(apply)
+		case apply := <-ciJobs:
+			m.ApplyCI(apply)
 		case data, ok := <-input:
 			if !ok {
 				return nil

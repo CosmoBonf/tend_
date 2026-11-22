@@ -131,6 +131,9 @@ func (m *Model) drawBody(g *vt.Grid) (cx, cy int, visible bool) {
 	case modeSettings:
 		m.drawSettings(g)
 		return 0, 0, false
+	case modeCI:
+		m.drawCI(g)
+		return 0, 0, false
 	}
 
 	m.drawHeader(g)
@@ -391,6 +394,7 @@ var helpLines = []string{
 	"  B       switch branch (or click it)",
 	"  L       history: commits, stashes, tags",
 	"  P       sync: pull, push (or ⟳)",
+	"  C       CI: the branch's runs on GitHub (or CI ✓)",
 	"  /       find a file by name",
 	"  r       refresh",
 	"  ,       settings (or the gear)",

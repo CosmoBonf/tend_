@@ -19,10 +19,11 @@ import (
 type gitBar struct {
 	branchFrom, branchTo int // columns of "⎇ name", -1 when there is none
 	syncAt               int // column of the sync button, -1 when none
+	ciFrom, ciTo         int // columns of the CI button, -1 when none
 }
 
 func (m *Model) gitBarLayout() gitBar {
-	bar := gitBar{branchFrom: -1, branchTo: -1, syncAt: -1}
+	bar := gitBar{branchFrom: -1, branchTo: -1, syncAt: -1, ciFrom: -1, ciTo: -1}
 	if m.status == nil || m.status.Branch == "" {
 		return bar
 	}
@@ -31,6 +32,13 @@ func (m *Model) gitBarLayout() gitBar {
 	bar.branchTo = x + runewidth.StringWidth("⎇ "+m.status.Branch)
 	if m.cols >= 12 {
 		bar.syncAt = m.cols - 2
+	}
+	// The CI before the sync, when the branch's name leaves room for it.
+	if text, _ := m.ciFooterText(); text != "" && bar.syncAt > 0 {
+		w := runewidth.StringWidth(text)
+		if from := bar.syncAt - 2 - w; from > bar.branchTo+8 {
+			bar.ciFrom, bar.ciTo = from, from+w
+		}
 	}
 	return bar
 }
@@ -42,6 +50,9 @@ func (m *Model) drawGitBar(g *vt.Grid) {
 	if bar.syncAt < 0 {
 		limit = m.cols
 	}
+	if bar.ciFrom >= 0 {
+		limit = bar.ciFrom - 1 // the counts stop short of the CI
+	}
 	x := put(g, 1, 1, m.projectName(), styleBold, limit)
 	if bar.branchFrom < 0 {
 		return
@@ -52,6 +63,10 @@ func (m *Model) drawGitBar(g *vt.Grid) {
 	}
 	if m.status.Behind > 0 {
 		put(g, x+1, 1, "↓"+strconv.Itoa(m.status.Behind), styleYellow, limit)
+	}
+	if bar.ciFrom >= 0 {
+		text, style := m.ciFooterText()
+		put(g, bar.ciFrom, 1, text, style, m.cols)
 	}
 	if bar.syncAt >= 0 {
 		glyph, style := "⟳", styleAccent
@@ -85,12 +100,30 @@ func (m *Model) gitFooterLayout() (branch, sync barZone, branchText, syncText st
 	return branch, sync, branchText, syncText
 }
 
+// ciFooterZone is where the CI button goes, after the sync's, when there
+// is room for it and something to say.
+func (m *Model) ciFooterZone(sync barZone) (barZone, string, vt.Style) {
+	text, style := m.ciFooterText()
+	if text == "" {
+		return barZone{-1, -1}, "", style
+	}
+	from := sync.to + 2
+	to := from + runewidth.StringWidth(text)
+	if to > m.cols {
+		return barZone{-1, -1}, "", style
+	}
+	return barZone{from, to}, text, style
+}
+
 // drawGitFooter paints the branch and sync buttons on row y, dimmed as
-// herdr-sidebar's idle buttons are.
+// herdr-sidebar's idle buttons are, and the CI's beside them in its colour.
 func (m *Model) drawGitFooter(g *vt.Grid, y int) {
 	branch, sync, branchText, syncText := m.gitFooterLayout()
 	put(g, branch.from, y, truncate(branchText, branch.to-branch.from), styleDim, branch.to)
 	put(g, sync.from, y, syncText, styleDim, m.cols)
+	if zone, text, style := m.ciFooterZone(sync); zone.from >= 0 {
+		put(g, zone.from, y, text, style, m.cols)
+	}
 }
 
 // gitFooterClick answers a press on the git footer: the branch opens the
@@ -102,6 +135,10 @@ func (m *Model) gitFooterClick(x int) {
 		m.openBranches()
 	case x >= sync.from && x < sync.to:
 		m.startSync()
+	default:
+		if zone, _, _ := m.ciFooterZone(sync); zone.from >= 0 && x >= zone.from && x < zone.to {
+			m.openCI()
+		}
 	}
 }
 
@@ -123,6 +160,8 @@ func (m *Model) gitBarClick(x int) {
 	switch {
 	case bar.syncAt >= 0 && x >= bar.syncAt-1:
 		m.startSync()
+	case bar.ciFrom >= 0 && x >= bar.ciFrom && x < bar.ciTo:
+		m.openCI()
 	case bar.branchFrom >= 0 && x >= bar.branchFrom && x < bar.branchTo:
 		m.openBranches()
 	}

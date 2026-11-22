@@ -47,6 +47,8 @@ const (
 	modePrompt
 	modeHistory
 	modeSettings
+	// modeCI is the branch's runs on GitHub Actions (ci.go).
+	modeCI
 )
 
 // Opener opens a file for editing somewhere other than here: in tend, an
@@ -108,6 +110,8 @@ type Model struct {
 	watchSettings func() (Settings, bool)
 	// binaryChanged says a new build of the panel is installed (upgrade.go).
 	binaryChanged func() bool
+	// ci is the branch's CI on GitHub Actions (ci.go).
+	ci ci
 	// writeSetting writes one of [files] for the gear's settings.
 	writeSetting   func(key, value string) error
 	settingsCursor int
@@ -438,6 +442,8 @@ func (m *Model) Key(k Key) {
 		m.historyKey(k)
 	case modeSettings:
 		m.settingsKey(k)
+	case modeCI:
+		m.ciKey(k)
 	case modePrompt:
 		m.promptKey(k)
 	default:
@@ -483,6 +489,8 @@ func (m *Model) listKey(k Key, pending string) {
 		m.say("refreshed", false)
 	case "B":
 		m.openBranches()
+	case "C":
+		m.openCI()
 	case "L":
 		m.openHistory(histCommits, "")
 	case "P":

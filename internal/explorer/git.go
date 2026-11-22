@@ -96,7 +96,9 @@ func (c Change) Letter() byte {
 
 // Status is the repository as `git status` sees it.
 type Status struct {
-	Branch        string
+	Branch string
+	// Head is the commit checked out, whose CI runs are the ones shown.
+	Head          string
 	Upstream      string
 	Ahead, Behind int
 	Changes       []Change
@@ -193,6 +195,11 @@ func parseStatus(out []byte) *Status {
 			st.detachedOrNone = st.Branch == "(detached)"
 		case strings.HasPrefix(line, "# branch.upstream "):
 			st.Upstream = strings.TrimPrefix(line, "# branch.upstream ")
+		case strings.HasPrefix(line, "# branch.oid "):
+			st.Head = strings.TrimPrefix(line, "# branch.oid ")
+			if st.Head == "(initial)" {
+				st.Head = ""
+			}
 		case strings.HasPrefix(line, "# branch.ab "):
 			for _, f := range strings.Fields(strings.TrimPrefix(line, "# branch.ab ")) {
 				n, _ := strconv.Atoi(f[1:])

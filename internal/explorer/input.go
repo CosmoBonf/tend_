@@ -273,6 +273,9 @@ func (m *Model) Mouse(ev Mouse) {
 	case modeSettings:
 		m.settingsMouse(ev)
 		return
+	case modeCI:
+		m.ciMouse(ev)
+		return
 	case modePrompt:
 		return
 	case modeHelp, modeCommit:
