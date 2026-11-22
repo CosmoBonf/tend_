@@ -321,6 +321,9 @@ func (t *tui) runMenu(m ui.Menu, item ui.MenuItem) error {
 	case ui.MenuGroupAgentStart:
 		return t.startAgentInGroup(m.Group, item.Arg)
 
+	case ui.MenuGitHub:
+		return t.openGitHubAccount()
+
 	case ui.MenuAddAccount:
 		t.mu.Lock()
 		t.promptGroup = item.Arg

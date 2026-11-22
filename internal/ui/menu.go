@@ -52,6 +52,8 @@ const (
 	// starts the one in Arg in a new space of the group, in its folder.
 	MenuGroupAgent      = "menu-group-agent"
 	MenuGroupAgentStart = "menu-group-agent-start"
+	// MenuGitHub signs in to GitHub, or changes account, in a tab.
+	MenuGitHub = "menu-github"
 	// MenuAddAccount asks for the name of a new account of the agent in
 	// Arg, and starts the agent on it to log in.
 	MenuAddAccount = "menu-add-account"
@@ -166,6 +168,7 @@ func GlobalMenu(stale, ready, notes bool, x, y int) Menu {
 		// tend's own, above herdr's: where to find everything else.
 		{Label: "all tools...", Action: MenuTools},
 		{Label: "MCP servers", Action: MenuMCP},
+		{Label: "GitHub account...", Action: MenuGitHub},
 		{Label: "settings", Action: MenuSettings},
 		{Label: "keybinds", Action: MenuKeybinds},
 		{Label: "reload config", Action: MenuReload},
