@@ -321,6 +321,13 @@ func (t *tui) runMenu(m ui.Menu, item ui.MenuItem) error {
 	case ui.MenuGroupAgentStart:
 		return t.startAgentInGroup(m.Group, item.Arg)
 
+	case ui.MenuAddAccount:
+		t.mu.Lock()
+		t.promptGroup = item.Arg
+		t.mu.Unlock()
+		t.startPrompt(promptNewAccount)
+		return nil
+
 	case ui.MenuGroupDirClear:
 		if err := t.client.SetGroupDir(m.Group, ""); err != nil {
 			return err

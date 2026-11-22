@@ -18,6 +18,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
+	"github.com/auth-com-br/tend/internal/integration"
 	"github.com/auth-com-br/tend/internal/policy"
 	"github.com/auth-com-br/tend/internal/update"
 	"github.com/auth-com-br/tend/internal/usage"
@@ -43,10 +44,45 @@ type Config struct {
 	GitLab     GitLab    `toml:"gitlab"`
 	Tickets    Tickets   `toml:"tickets"`
 	Activity   Activity  `toml:"activity"`
+	// Accounts are the logins an agent can be started with, tend's own and
+	// the owner's: two Claude accounts, or a company's, side by side.
+	Accounts []Account `toml:"accounts"`
 	// Policy is what agents may and may not do (internal/policy). The
 	// server reads it again each time it checks, so a rule written here
 	// applies from the next agent on, with no restart.
 	Policy policy.Policy `toml:"policy"`
+}
+
+// Account is one login of an agent: the config directory it is started
+// with, through the variable the agent reads for it (CLAUDE_CONFIG_DIR,
+// CODEX_HOME…). The login itself — a subscription's, or a company's key —
+// is the agent's, made once inside it and kept in that directory; tend
+// keeps only where the directory is.
+type Account struct {
+	Name  string `toml:"name"`
+	Agent string `toml:"agent"`
+	Home  string `toml:"home"`
+}
+
+// HomeDir is the account's directory with a leading ~ made the home.
+func (a Account) HomeDir() string {
+	if a.Home == "~" || strings.HasPrefix(a.Home, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, strings.TrimPrefix(a.Home, "~"))
+		}
+	}
+	return a.Home
+}
+
+// AccountsFor are the accounts of one agent, in the order written.
+func (c Config) AccountsFor(agent string) []Account {
+	var out []Account
+	for _, a := range c.Accounts {
+		if a.Agent == agent {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 // Activity is the record of what agents did (internal/activity, `tend
@@ -702,6 +738,16 @@ func (c Config) validate() error {
 	default:
 		return fmt.Errorf("files.icons is %q; use \"none\", \"nerd\" or \"emoji\"", c.Files.Icons)
 	}
+	for i, a := range c.Accounts {
+		switch {
+		case strings.TrimSpace(a.Name) == "":
+			return fmt.Errorf("accounts[%d] has no name", i)
+		case strings.TrimSpace(a.Home) == "":
+			return fmt.Errorf("account %q has no home: the directory its login is kept in", a.Name)
+		case integration.HomeEnv(a.Agent) == "":
+			return fmt.Errorf("account %q: %q cannot be given a directory of its own; use claude, codex, copilot, cursor, qwen, kimi, qodercli, agy, grok or pi", a.Name, a.Agent)
+		}
+	}
 	switch c.Files.Dock {
 	case "", "left", "right":
 	default:
@@ -1169,6 +1215,15 @@ enabled = false
 # agent = "claude"
 # What the agent is told; {url}, {number}, {title} and {repo} are the issue's.
 # prompt = "Complete {url}"
+
+# Accounts: more than one login of an agent. Each is a directory the agent
+# keeps its login in; "new agent..." offers each one by name, and the first
+# start there asks you to log in (/login in Claude, codex login in Codex).
+# tend keeps no password or key, only where the directory is.
+# [[accounts]]
+# name = "work"
+# agent = "claude"
+# home = "~/.claude-work"
 `
 
 // NotifyDelay is how long an agent's news is held before it is said.

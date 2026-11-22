@@ -52,6 +52,9 @@ const (
 	// starts the one in Arg in a new space of the group, in its folder.
 	MenuGroupAgent      = "menu-group-agent"
 	MenuGroupAgentStart = "menu-group-agent-start"
+	// MenuAddAccount asks for the name of a new account of the agent in
+	// Arg, and starts the agent on it to log in.
+	MenuAddAccount = "menu-add-account"
 	// MenuContinueIn offers the agents a pane's task can be handed to, and
 	// MenuContinueWith hands it to the one in Arg (docs/MEMORY.md).
 	MenuContinueIn   = "continue-in"
@@ -282,6 +285,7 @@ func SSHNewMenu(x, y int) Menu {
 func NewSpaceMenu(x, y int) Menu {
 	return Menu{Title: "new", X: x, Y: y, Items: []MenuItem{
 		{Label: "new space", Action: MenuNewSpace},
+		{Label: "new agent...", Action: MenuGroupAgent},
 		{Label: "side by side...", Action: MenuSideBySide},
 	}}
 }
@@ -493,6 +497,27 @@ func AgentMenu(pane, tab, workspace uint64, x, y int) Menu {
 // name it is shown by.
 type AgentChoice struct {
 	ID, Name string
+	// Account is one of the agent's [[accounts]], by name; "" is the login
+	// the agent has on its own.
+	Account string
+	// CanAddAccount is an agent that can be given a directory of its own,
+	// and so another account.
+	CanAddAccount bool
+}
+
+// AgentChoiceArg is what an agent menu's item carries, the agent and the
+// account; ParseAgentChoiceArg reads it back.
+func AgentChoiceArg(a AgentChoice) string {
+	if a.Account == "" {
+		return a.ID
+	}
+	return a.ID + "\x00" + a.Account
+}
+
+// ParseAgentChoiceArg is the agent and the account an item carries.
+func ParseAgentChoiceArg(arg string) (id, account string) {
+	id, account, _ = strings.Cut(arg, "\x00")
+	return id, account
 }
 
 // GroupAgentMenu lists the agents that can be started in a group: each one
@@ -500,9 +525,22 @@ type AgentChoice struct {
 func GroupAgentMenu(group string, agents []AgentChoice, x, y int) Menu {
 	items := make([]MenuItem, 0, len(agents))
 	for _, a := range agents {
-		items = append(items, MenuItem{Label: a.Name, Action: MenuGroupAgentStart, Arg: a.ID})
+		label := a.Name
+		if a.Account != "" {
+			label += " · " + a.Account
+		}
+		items = append(items, MenuItem{Label: label, Action: MenuGroupAgentStart, Arg: AgentChoiceArg(a)})
 	}
-	return Menu{Title: "start in " + group, Items: items, X: x, Y: y, Group: group}
+	for _, a := range agents {
+		if a.Account == "" && a.CanAddAccount {
+			items = append(items, MenuItem{Label: "+ account for " + a.Name + "...", Action: MenuAddAccount, Arg: a.ID})
+		}
+	}
+	title := "start in " + group
+	if group == "" {
+		title = "new agent"
+	}
+	return Menu{Title: title, Items: items, X: x, Y: y, Group: group}
 }
 
 // ContinueMenu lists the agents a pane's task can be handed to — the same

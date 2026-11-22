@@ -26,6 +26,35 @@ const (
 	HermesHomeEnv              = "HERMES_HOME"
 )
 
+// HomeEnv is the variable that points an agent at a config directory of
+// its own, which is where it keeps its login: two directories are two
+// accounts (tend's [[accounts]]). "" is an agent with no such variable.
+func HomeEnv(agent string) string {
+	switch agent {
+	case "claude":
+		return ClaudeConfigDirEnv
+	case "codex":
+		return CodexHomeEnv
+	case "copilot":
+		return CopilotHomeEnv
+	case "cursor":
+		return CursorConfigDirEnv
+	case "kimi":
+		return KimiCodeHomeEnv
+	case "qodercli":
+		return QoderConfigDirEnv
+	case "qwen":
+		return QwenHomeEnv
+	case "agy":
+		return AntigravityCLIConfigDirEnv
+	case "grok":
+		return GrokHomeEnv
+	case "pi":
+		return PiCodingAgentDirEnv
+	}
+	return ""
+}
+
 // PiExtensionDir returns ~/.pi/agent/extensions, or $PI_CODING_AGENT_DIR/extensions.
 func PiExtensionDir() (string, error) {
 	agentDir, err := configDirFromEnvOrHome(PiCodingAgentDirEnv, ".pi", "agent")

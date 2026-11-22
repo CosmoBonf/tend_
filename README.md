@@ -252,6 +252,35 @@ you alone; a password is in it as typed, and ssh is given it by tend through
 machine it has never seen (`StrictHostKeyChecking=accept-new`; a key that
 changed is still refused) and works in a session on this machine.
 
+### more than one account of an agent
+
+Two Claude accounts, a personal one and a company's, or two of Codex:
+**new** at the foot of the spaces list, then **new agent...**, lists the
+agents installed and each one's accounts. **+ account for Claude Code...**
+asks for a name (`work`, `company x`), and starts Claude on it in a space
+of its own: log in there (`/login` in Claude, `codex login` in Codex) and
+it stays logged in. From then on the account is in the list by name —
+`Claude Code · work` — and the space is named after it.
+
+An account is a directory the agent keeps its login in (`~/.claude-work`),
+given to it through its own variable (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`);
+tend keeps no password or key, only where the directory is, in the
+settings file:
+
+```toml
+[[accounts]]
+name = "work"
+agent = "claude"
+home = "~/.claude-work"
+```
+
+A company that gave you a key rather than a login: start the account once
+and put the key in that directory's own settings, as the agent documents
+(Claude Code's `apiKeyHelper` or its `env` in `settings.json`). tend's hooks
+are installed in each account's directory on its first start, so its state
+is followed as the default account's is. The shell left when the agent
+exits is still on the account.
+
 ### what agents did, and rules for them
 
 The session server keeps a record of every agent: when it started and

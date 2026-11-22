@@ -115,3 +115,39 @@ func TestTopLevelKeysGoBeforeEveryTable(t *testing.T) {
 		t.Error("with the key missing, the welcome shows")
 	}
 }
+
+// TestAnAccountIsAddedOnceAndOnlyForAnAgentThatCanHaveOne: AddAccount puts a
+// [[accounts]] table at the end of the settings, refuses the same name for
+// the same agent, and an account of an agent with no directory of its own
+// is refused when the file is read. If it regresses, a second account
+// overwrites the first, or one that can never work is offered.
+func TestAnAccountIsAddedOnceAndOnlyForAnAgentThatCanHaveOne(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[ui]\nmouse = true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TEND_CONFIG", path)
+	if err := AddAccount(Account{Name: "work", Agent: "claude", Home: "~/.claude-work"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := AddAccount(Account{Name: "work", Agent: "claude", Home: "~/.claude-work"}); err == nil {
+		t.Error("the same account was added twice")
+	}
+	if err := AddAccount(Account{Name: "work", Agent: "codex", Home: "~/.codex-work"}); err != nil {
+		t.Errorf("an account of the same name for another agent: %v", err)
+	}
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.AccountsFor("claude"); len(got) != 1 || got[0].Name != "work" || !cfg.UI.Mouse {
+		t.Errorf("accounts %+v, mouse %v", cfg.Accounts, cfg.UI.Mouse)
+	}
+	home, _ := os.UserHomeDir()
+	if got := cfg.AccountsFor("claude")[0].HomeDir(); got != filepath.Join(home, ".claude-work") {
+		t.Errorf("home = %q", got)
+	}
+	if _, err := parse("[[accounts]]\nname = \"x\"\nagent = \"aider\"\nhome = \"~/.x\"\n", "x"); err == nil {
+		t.Error("an account of aider, which has no directory of its own, was accepted")
+	}
+}

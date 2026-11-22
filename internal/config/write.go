@@ -72,6 +72,38 @@ func SetTopLevel(key, value string) error {
 	return writeFile(path, updated)
 }
 
+// AddAccount writes one more [[accounts]] at the end of the settings file,
+// where a table of its own cannot change what any key above it means. A
+// name the agent already has an account by is refused rather than doubled.
+func AddAccount(a Account) error {
+	path, err := Path()
+	if err != nil {
+		return err
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+		content = []byte(Example)
+	}
+	if current, err := parse(string(content), path); err == nil {
+		for _, have := range current.AccountsFor(a.Agent) {
+			if have.Name == a.Name {
+				return fmt.Errorf("%s already has an account named %q", a.Agent, a.Name)
+			}
+		}
+	}
+	updated := strings.TrimRight(string(content), "\n") + "\n\n[[accounts]]\n" +
+		"name = " + strconv.Quote(a.Name) + "\n" +
+		"agent = " + strconv.Quote(a.Agent) + "\n" +
+		"home = " + strconv.Quote(a.Home) + "\n"
+	if _, err := parse(updated, path); err != nil {
+		return fmt.Errorf("config: refusing to write the account: %w", err)
+	}
+	return writeFile(path, updated)
+}
+
 // UpsertTopLevel returns content with key set to value before the first
 // table: in place when it is already there, otherwise as the first line.
 // A commented-out line is not the key, and is left as it is.

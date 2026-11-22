@@ -42,6 +42,9 @@ const (
 	// promptSSHRenameGroup renames the one in promptGroup (tui_ssh.go).
 	promptSSHNewGroup
 	promptSSHRenameGroup
+	// promptNewAccount names a new account of the agent in promptGroup
+	// (tui_groupagent.go).
+	promptNewAccount
 )
 
 // startPrompt opens the prompt, seeded with the current name.
@@ -313,6 +316,11 @@ func (t *tui) commitPrompt() error {
 			t.sshRenameGroup(group, name)
 		}
 		return nil
+	case promptNewAccount:
+		if group == "" {
+			return nil
+		}
+		return t.addAccount(group, name)
 	case promptGroupDir:
 		if group == "" {
 			return nil
@@ -351,6 +359,8 @@ func (t *tui) promptLabelLocked() string {
 		return "new ssh group — name"
 	case promptSSHRenameGroup:
 		return "rename ssh group"
+	case promptNewAccount:
+		return "new " + t.promptGroup + " account — name (work, company x…)"
 	}
 	return ""
 }

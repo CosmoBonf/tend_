@@ -1,6 +1,11 @@
 package main
 
 import (
+	"strings"
+	"unicode"
+
+	"github.com/auth-com-br/tend/internal/config"
+	"github.com/auth-com-br/tend/internal/integration"
 	"github.com/auth-com-br/tend/internal/proto"
 	"github.com/auth-com-br/tend/internal/ui"
 )
@@ -35,7 +40,7 @@ func (t *tui) openGroupAgentMenu(group string, x, y int) {
 		t.mu.Unlock()
 		t.setMessage("", false)
 	}
-	choices := installedAgents(list)
+	choices := withAccounts(installedAgents(list), t.accounts())
 	if len(choices) == 0 {
 		t.setMessage("no agent is installed here; ctrl+b A installs one", true)
 		return
@@ -49,15 +54,92 @@ func installedAgents(list []proto.AgentStatus) []ui.AgentChoice {
 	var out []ui.AgentChoice
 	for _, a := range list {
 		if a.Installed && a.Kind != "memory" {
-			out = append(out, ui.AgentChoice{ID: a.ID, Name: a.Name})
+			out = append(out, ui.AgentChoice{ID: a.ID, Name: a.Name, CanAddAccount: integration.HomeEnv(a.ID) != ""})
 		}
 	}
 	return out
 }
 
+// accounts are the [[accounts]] in the settings file as it is now: one
+// written there is offered without restarting tend.
+func (t *tui) accounts() []config.Account {
+	if c, err := config.LoadLenient(); err == nil {
+		return c.Accounts
+	}
+	return t.config.Accounts
+}
+
+// withAccounts puts each agent's [[accounts]] after it, one choice each:
+// the agent's own login, then the others by name.
+func withAccounts(agents []ui.AgentChoice, accounts []config.Account) []ui.AgentChoice {
+	var out []ui.AgentChoice
+	for _, a := range agents {
+		out = append(out, a)
+		for _, acc := range accounts {
+			if acc.Agent == a.ID {
+				out = append(out, ui.AgentChoice{ID: a.ID, Name: a.Name, Account: acc.Name})
+			}
+		}
+	}
+	return out
+}
+
+// addAccount writes a new account of an agent, in a directory named after
+// it beside the agent's own (~/.claude-work), and starts the agent on it,
+// whose first start is where the account is logged in to.
+func (t *tui) addAccount(agentID, name string) error {
+	if t.host != "" {
+		// The directory and the settings would be this machine's, and the
+		// agent runs on the other one.
+		t.setMessage("an account is added on the machine the session runs on: tend config there", true)
+		return nil
+	}
+	acc := config.Account{Name: name, Agent: agentID, Home: "~/." + agentID + "-" + accountSlug(name)}
+	if err := config.AddAccount(acc); err != nil {
+		t.setMessage(err.Error(), true)
+		return nil
+	}
+	t.setMessage(name+" added: log in to it in the space that opens", false)
+	return t.startAgentInGroup("", ui.AgentChoiceArg(ui.AgentChoice{ID: agentID, Account: name}))
+}
+
+// accountSlug is a name made fit for a directory: lower case, with what is
+// not a letter or a digit made a dash.
+func accountSlug(name string) string {
+	var b strings.Builder
+	dash := false
+	for _, r := range strings.ToLower(name) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+			dash = false
+		} else if !dash && b.Len() > 0 {
+			b.WriteByte('-')
+			dash = true
+		}
+	}
+	if s := strings.TrimSuffix(b.String(), "-"); s != "" {
+		return s
+	}
+	return "account"
+}
+
+// accountScript starts an agent on an account: its directory made if it is
+// new, tend's hooks put in it — they are per directory, and without them
+// tend would not hear what the agent is doing — then the agent, and a shell
+// after it, as resumeScript. The directory comes in the environment, so the
+// shell left behind starts the agent on the same account again.
+const accountScript = `mkdir -p "$1" && "${TEND_BIN_PATH:-tend}" integration install "$2" >/dev/null 2>&1
+shift 2
+"$@"
+exec "${SHELL:-/bin/sh}"`
+
 // startAgentInGroup starts an agent in a new space of a group, named after
-// the agent, in the group's folder.
-func (t *tui) startAgentInGroup(group, id string) error {
+// the agent, in the group's folder. arg is a menu item's: the agent, and
+// the account to start it on. Group "" is "new agent..." at the foot of the
+// spaces: the space goes beside the one in view, in its project.
+func (t *tui) startAgentInGroup(group, arg string) error {
+	id, accountName := ui.ParseAgentChoiceArg(arg)
+	accounts := t.accounts() // a file read, so not under the lock
 	t.mu.Lock()
 	var agent proto.AgentStatus
 	for _, a := range t.agentStatus {
@@ -65,8 +147,23 @@ func (t *tui) startAgentInGroup(group, id string) error {
 			agent = a
 		}
 	}
+	var account config.Account
+	for _, acc := range accounts {
+		if acc.Agent == id && acc.Name == accountName {
+			account = acc
+		}
+	}
+	var dirOf uint64
+	if group == "" {
+		dirOf = t.focus
+		for _, w := range t.snap.Workspaces {
+			if w.ID == t.workspace && w.Group != sshGroup {
+				group = w.Group
+			}
+		}
+	}
 	t.mu.Unlock()
-	if agent.ID == "" {
+	if agent.ID == "" || accountName != "" && account.Name == "" {
 		return nil
 	}
 	// The path the catalog found it at: the program a pane runs is the
@@ -75,12 +172,21 @@ func (t *tui) startAgentInGroup(group, id string) error {
 	if program == "" {
 		program = agent.ID
 	}
-	err := t.newWorkspaceRunning(group, agent.Name, agent.Name, func(dir string) proto.PaneSpec {
-		return proto.PaneSpec{
-			Command: []string{"/bin/sh", "-c", resumeScript, "tend-agent", program},
-			Dir:     dir,
-			Agent:   agent.ID,
+	name := agent.Name
+	command := []string{"/bin/sh", "-c", resumeScript, "tend-agent", program}
+	var env []string
+	if account.Name != "" {
+		name += " · " + account.Name
+		home := account.HomeDir()
+		env = []string{integration.HomeEnv(agent.ID) + "=" + home}
+		command = []string{"/bin/sh", "-c", accountScript, "tend-agent", home, agent.ID, program}
+	}
+	err := t.newWorkspaceRunning(group, name, name, func(dir string) proto.PaneSpec {
+		spec := proto.PaneSpec{Command: command, Dir: dir, Env: env, Agent: agent.ID}
+		if dir == "" {
+			spec.DirOf = dirOf
 		}
+		return spec
 	})
 	if err != nil {
 		t.setMessage(agent.Name+" did not start: "+refusalText(err), true)
