@@ -309,6 +309,11 @@ says which organization each Claude login is in — `own login · personal`,
 one e-mail can be in a Pro and a company's Team; and each account there can
 be renamed, or removed with its folder (typing `yes`).
 
+Left of the accounts, `▴ log` opens a short pane under the agent that
+follows `~/tend-dev.log` — where an agent can write the long commands it
+runs, tests and builds, as they run — and `▾ log` puts it away. Drag its
+border to make it taller or shorter.
+
 ### what agents did, and rules for them
 
 The session server keeps a record of every agent: when it started and

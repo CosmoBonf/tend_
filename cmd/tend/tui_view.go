@@ -368,8 +368,13 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 			return nil
 		}
 		t.mu.Lock()
-		onAccounts := ui.StatusAccountsAt(t.buildFrame(), t.cols, t.rows, ev.X, ev.Y)
+		frame := t.buildFrame()
+		onAccounts := ui.StatusAccountsAt(frame, t.cols, t.rows, ev.X, ev.Y)
+		onLog := ui.StatusLogAt(frame, t.cols, t.rows, ev.X, ev.Y)
 		t.mu.Unlock()
+		if onLog {
+			return t.toggleLog()
+		}
 		if onAccounts {
 			// Opened from the bar's last row; the menu is moved up onto the
 			// screen as any menu near the bottom is.

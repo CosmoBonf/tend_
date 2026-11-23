@@ -449,6 +449,12 @@ type Frame struct {
 	// use — "git CosmoBonf · claude work" — which a click opens the
 	// accounts menu on (StatusAccountsAt). Empty draws nothing.
 	Accounts string
+	// LogOpen says whether the tab shows the live log pane under the agent
+	// (cmd/tend's tui_log.go). The bar's button draws "▾ log" then, which
+	// a click puts away, and "▴ log" otherwise, which a click opens.
+	LogOpen bool
+	// LogButton draws that button at all.
+	LogButton bool
 
 	// Menu is a context menu, opened on the thing it acts on. Nil when none
 	// is open.
@@ -1101,6 +1107,36 @@ func statusAccountsZone(f Frame, cols int) (from, to int, ok bool) {
 	return right - w, right, true
 }
 
+// statusLogZone is where the log button is on the status bar: left of the
+// accounts, or where they would be.
+func statusLogZone(f Frame, cols int) (from, to int, ok bool) {
+	if !f.LogButton || cols < 60 {
+		return 0, 0, false
+	}
+	right := cols
+	if f.UpdateReady && cols > 40 {
+		right -= len(" update ready") + 1
+	}
+	if from, _, ok := statusAccountsZone(f, cols); ok {
+		right = from
+	}
+	w := runewidth.StringWidth(statusLogLabel(f))
+	return right - w, right, true
+}
+
+func statusLogLabel(f Frame) string {
+	if f.LogOpen {
+		return " ▾ log "
+	}
+	return " ▴ log "
+}
+
+// StatusLogAt reports whether a point is on the status bar's log button.
+func StatusLogAt(f Frame, cols, rows, x, y int) bool {
+	from, to, ok := statusLogZone(f, cols)
+	return ok && y == rows-StatusRows && x >= from && x < to
+}
+
 // StatusAccountsAt reports whether a point is on the status bar's accounts.
 func StatusAccountsAt(f Frame, cols, rows, x, y int) bool {
 	from, to, ok := statusAccountsZone(f, cols)
@@ -1132,6 +1168,10 @@ func drawStatus(dst *vt.Grid, f Frame, theme Theme) {
 	}
 	if from, to, ok := statusAccountsZone(f, dst.Cols()); ok {
 		writeString(dst, from, y, " "+f.Accounts+" ", theme.StatusKey, to)
+		limit = from
+	}
+	if from, to, ok := statusLogZone(f, dst.Cols()); ok {
+		writeString(dst, from, y, statusLogLabel(f), theme.StatusKey, to)
 		limit = from
 	}
 

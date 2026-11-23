@@ -1170,6 +1170,8 @@ func (t *tui) buildFrame() ui.Frame {
 		EmptyHint:    t.emptyHintLocked(),
 		UpdateReady:  t.updateReadyLocked() != "",
 		Accounts:     t.accountsLabelLocked(t.config),
+		LogButton:    true,
+		LogOpen:      t.logPaneLocked() != 0,
 		Navigator:    t.navigatorFrameLocked(),
 		Toast:        t.toastFrameLocked(),
 		LinkHover:    t.linkHover,
