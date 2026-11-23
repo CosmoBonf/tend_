@@ -184,3 +184,44 @@ func TestADefaultAccountIsKeptAndPutsNewPanesOnIt(t *testing.T) {
 		t.Errorf("own login again, still %v", got)
 	}
 }
+
+// TestAnAccountIsRenamedAndRemovedWithItsDefault: a rename keeps the
+// account's directory and keeps it the default; a remove takes it out of
+// the defaults too, and leaves the rest of the file as it was. If it
+// regresses, the default names an account no longer there, or a rename
+// loses the login's directory.
+func TestAnAccountIsRenamedAndRemovedWithItsDefault(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("# mine\n[ui]\nmouse = true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TEND_CONFIG", path)
+	for _, a := range []Account{{Name: "sapcon", Agent: "claude", Home: "~/.claude-sapcon"}, {Name: "other", Agent: "claude", Home: "~/.claude-other"}} {
+		if err := AddAccount(a); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := SetDefaultAccount("claude", "sapcon"); err != nil {
+		t.Fatal(err)
+	}
+	if err := RenameAccount("claude", "sapcon", "work"); err != nil {
+		t.Fatal(err)
+	}
+	if err := RenameAccount("claude", "work", "other"); err == nil {
+		t.Error("renamed onto a name already taken")
+	}
+	cfg, _ := Load()
+	got := cfg.AccountsFor("claude")
+	if len(got) != 2 || got[0].Name != "work" || got[0].Home != "~/.claude-sapcon" || cfg.DefaultAccounts["claude"] != "work" {
+		t.Errorf("after the rename: %+v, default %q", got, cfg.DefaultAccounts["claude"])
+	}
+	if err := RemoveAccount("claude", "work"); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _ = Load()
+	data, _ := os.ReadFile(path)
+	if got := cfg.AccountsFor("claude"); len(got) != 1 || got[0].Name != "other" || cfg.DefaultAccounts["claude"] != "" ||
+		!cfg.UI.Mouse || !strings.Contains(string(data), "# mine") {
+		t.Errorf("after the remove: %+v, default %q\n%s", got, cfg.DefaultAccounts["claude"], data)
+	}
+}

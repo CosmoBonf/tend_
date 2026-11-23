@@ -59,6 +59,10 @@ const (
 	// agent starts on; an Arg with no account is the agent's own login.
 	MenuGitHubSwitch   = "menu-github-switch"
 	MenuDefaultAccount = "menu-default-account"
+	// MenuRenameAccount and MenuRemoveAccount ask, for the account in Arg
+	// (AgentChoiceArg), its new name, or whether to remove it.
+	MenuRenameAccount = "menu-rename-account"
+	MenuRemoveAccount = "menu-remove-account"
 	// MenuAddAccount asks for the name of a new account of the agent in
 	// Arg, and starts the agent on it to log in.
 	MenuAddAccount = "menu-add-account"
@@ -540,6 +544,10 @@ type AgentAccounts struct {
 	Accounts []string
 	// Default is the account it starts on, "" for its own login.
 	Default string
+	// Orgs is what each login is, by account name ("" its own): the
+	// organization it is logged in to, or that it is not. Unknown ones are
+	// left out.
+	Orgs map[string]string
 }
 
 // AccountsMenu is the status bar's accounts: the GitHub logins, the active
@@ -562,11 +570,20 @@ func AccountsMenu(github []GitHubAccount, agents []AgentAccounts, x, y int) Menu
 	}
 	items = append(items, MenuItem{Label: "  + sign in to another...", Action: MenuGitHub})
 	for _, ag := range agents {
+		org := func(name string) string {
+			if o := ag.Orgs[name]; o != "" {
+				return " · " + o
+			}
+			return ""
+		}
 		items = append(items, MenuItem{Label: ag.Name})
-		items = append(items, MenuItem{Label: mark(ag.Default == "", "own login"), Action: MenuDefaultAccount, Arg: ag.ID})
+		items = append(items, MenuItem{Label: mark(ag.Default == "", "own login"+org("")), Action: MenuDefaultAccount, Arg: ag.ID})
 		for _, acc := range ag.Accounts {
-			items = append(items, MenuItem{Label: mark(ag.Default == acc, acc), Action: MenuDefaultAccount,
-				Arg: AgentChoiceArg(AgentChoice{ID: ag.ID, Account: acc})})
+			arg := AgentChoiceArg(AgentChoice{ID: ag.ID, Account: acc})
+			items = append(items,
+				MenuItem{Label: mark(ag.Default == acc, acc+org(acc)), Action: MenuDefaultAccount, Arg: arg},
+				MenuItem{Label: "      rename " + acc + "...", Action: MenuRenameAccount, Arg: arg},
+				MenuItem{Label: "      remove " + acc + "...", Action: MenuRemoveAccount, Arg: arg})
 		}
 		items = append(items, MenuItem{Label: "  + new account...", Action: MenuAddAccount, Arg: ag.ID})
 	}

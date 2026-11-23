@@ -131,3 +131,74 @@ func TestTheStatusBarSaysTheAccountsAndSwitchesThem(t *testing.T) {
 		t.Errorf("gh was asked %q", data)
 	}
 }
+
+// TestAnAccountShowsItsOrganizationAndIsRenamedAndRemoved: the accounts
+// menu says which organization each Claude login is in, read from where
+// Claude keeps it — the owner has one e-mail in a Pro and a company Team —
+// and an account is renamed, then removed with yes typed, its folder
+// deleted. If it regresses, the owner cannot tell which login is which, nor
+// tidy away one made by mistake.
+func TestAnAccountShowsItsOrganizationAndIsRenamedAndRemoved(t *testing.T) {
+	home := t.TempDir()
+	for _, v := range []string{"GOPATH", "GOMODCACHE", "GOCACHE"} {
+		if out, err := exec.Command("go", "env", v).Output(); err == nil {
+			t.Setenv(v, strings.TrimSpace(string(out)))
+		}
+	}
+	t.Setenv("HOME", home)
+	org := func(path, name string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(`{"oauthAccount":{"emailAddress":"me@x","organizationName":"`+name+`"}}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	org(filepath.Join(home, ".claude.json"), "me@x's Organization")
+	org(filepath.Join(home, ".claude-acme", ".claude.json"), "Acme")
+	cfg := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(cfg, []byte(quietSettings+"\n[[accounts]]\nname = \"acme\"\nagent = \"claude\"\nhome = \"~/.claude-acme\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	withConfig(t, cfg)
+
+	a := startSession(t, 160, 34)
+	openMenu := func() {
+		t.Helper()
+		a.waitForScreen(t, "the accounts on the bar", func(string) bool {
+			return strings.Contains(a.lines()[len(a.lines())-1], "claude ")
+		})
+		bar := len(a.lines())
+		a.clickAt(t, columnOfString(a.lines()[bar-1], "claude ")+2, bar)
+		a.waitForScreen(t, "the accounts menu", func(s string) bool { return strings.Contains(s, "own login") })
+	}
+	openMenu()
+	a.waitForScreen(t, "each login's organization", func(s string) bool {
+		return strings.Contains(s, "own login · personal") && strings.Contains(s, "acme · Acme")
+	})
+
+	a.clickText(t, "rename acme...")
+	// The prompt's own frame, not the menu's item of the same words.
+	a.waitForScreen(t, "the rename prompt", func(s string) bool { return strings.Contains(s, "┌─ rename acme") })
+	a.send(t, "sapcon\r") // over the old name, which starts selected
+	a.waitForScreen(t, "renamed", func(s string) bool { return strings.Contains(s, "acme is now sapcon") })
+
+	openMenu()
+	a.waitForScreen(t, "the new name, the same login", func(s string) bool { return strings.Contains(s, "sapcon · Acme") })
+	a.clickText(t, "remove sapcon...")
+	a.waitForScreen(t, "the question", func(s string) bool {
+		return strings.Contains(s, "type yes") && !strings.Contains(s, "remove sapcon...")
+	})
+	a.send(t, "yes\r")
+	a.waitForScreen(t, "removed", func(s string) bool { return strings.Contains(s, "sapcon removed") })
+	if _, err := os.Stat(filepath.Join(home, ".claude-acme")); !os.IsNotExist(err) {
+		t.Errorf("the account's folder is still there: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".claude.json")); err != nil {
+		t.Errorf("the own login was touched: %v", err)
+	}
+	if data, _ := os.ReadFile(cfg); strings.Contains(string(data), "[[accounts]]") {
+		t.Errorf("the account is still in the settings:\n%s", data)
+	}
+}

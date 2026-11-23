@@ -43,8 +43,12 @@ const (
 	promptSSHNewGroup
 	promptSSHRenameGroup
 	// promptNewAccount names a new account of the agent in promptGroup
-	// (tui_groupagent.go).
+	// (tui_groupagent.go); promptRenameAccount names again, and
+	// promptRemoveAccount asks yes to remove, the account in promptGroup
+	// (ui.AgentChoiceArg, tui_accounts.go).
 	promptNewAccount
+	promptRenameAccount
+	promptRemoveAccount
 )
 
 // startPrompt opens the prompt, seeded with the current name.
@@ -102,6 +106,8 @@ func (t *tui) startPrompt(kind promptKind) {
 		}
 	case promptRenameGroup, promptSSHRenameGroup:
 		t.promptText = t.promptGroup
+	case promptRenameAccount:
+		_, t.promptText = ui.ParseAgentChoiceArg(t.promptGroup)
 	case promptGroupDir:
 		t.promptText = t.groupDirLocked(t.promptGroup)
 		if t.promptText == "" {
@@ -321,6 +327,19 @@ func (t *tui) commitPrompt() error {
 			return nil
 		}
 		return t.addAccount(group, name)
+	case promptRenameAccount:
+		if group != "" {
+			t.renameAccount(group, name)
+		}
+		return nil
+	case promptRemoveAccount:
+		// Only yes removes: the folder holds the account's login.
+		if group != "" && strings.EqualFold(name, "yes") {
+			t.removeAccount(group)
+		} else {
+			t.setMessage("nothing removed", false)
+		}
+		return nil
 	case promptGroupDir:
 		if group == "" {
 			return nil
@@ -361,6 +380,12 @@ func (t *tui) promptLabelLocked() string {
 		return "rename ssh group"
 	case promptNewAccount:
 		return "new " + t.promptGroup + " account — name (work, company x…)"
+	case promptRenameAccount:
+		_, acc := ui.ParseAgentChoiceArg(t.promptGroup)
+		return "rename " + acc
+	case promptRemoveAccount:
+		_, acc := ui.ParseAgentChoiceArg(t.promptGroup)
+		return "remove " + acc + " and delete its folder, its login with it? type yes"
 	}
 	return ""
 }

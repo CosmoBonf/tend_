@@ -330,6 +330,17 @@ func (t *tui) runMenu(m ui.Menu, item ui.MenuItem) error {
 		go t.switchGitHub(item.Arg)
 		return nil
 
+	case ui.MenuRenameAccount, ui.MenuRemoveAccount:
+		t.mu.Lock()
+		t.promptGroup = item.Arg
+		t.mu.Unlock()
+		if item.Action == ui.MenuRenameAccount {
+			t.startPrompt(promptRenameAccount)
+		} else {
+			t.startPrompt(promptRemoveAccount)
+		}
+		return nil
+
 	case ui.MenuDefaultAccount:
 		id, account := ui.ParseAgentChoiceArg(item.Arg)
 		t.setDefaultAccount(id, account)

@@ -120,6 +120,119 @@ func SetDefaultAccount(agent, name string) error {
 	return writeFile(path, updated)
 }
 
+// RenameAccount gives an agent's account another name, its directory kept,
+// and keeps it the default when it was.
+func RenameAccount(agent, from, to string) error {
+	return rewriteAccounts(func(c *Config) error {
+		for _, a := range c.Accounts {
+			if a.Agent == agent && a.Name == to {
+				return fmt.Errorf("%s already has an account named %q", agent, to)
+			}
+		}
+		found := false
+		for i, a := range c.Accounts {
+			if a.Agent == agent && a.Name == from {
+				c.Accounts[i].Name, found = to, true
+			}
+		}
+		if !found {
+			return fmt.Errorf("%s has no account named %q", agent, from)
+		}
+		if c.DefaultAccounts[agent] == from {
+			c.DefaultAccounts[agent] = to
+		}
+		return nil
+	})
+}
+
+// RemoveAccount takes an account out of the settings, and out of the
+// defaults when it was the one its agent starts on. Its directory is the
+// caller's to remove or keep.
+func RemoveAccount(agent, name string) error {
+	return rewriteAccounts(func(c *Config) error {
+		kept := c.Accounts[:0]
+		found := false
+		for _, a := range c.Accounts {
+			if a.Agent == agent && a.Name == name {
+				found = true
+				continue
+			}
+			kept = append(kept, a)
+		}
+		if !found {
+			return fmt.Errorf("%s has no account named %q", agent, name)
+		}
+		c.Accounts = kept
+		if c.DefaultAccounts[agent] == name {
+			delete(c.DefaultAccounts, agent)
+		}
+		return nil
+	})
+}
+
+// rewriteAccounts reads the settings, lets change alter the accounts and
+// the defaults, and writes them back: every [[accounts]] table taken out of
+// the file and the ones left written again at its end, default_accounts
+// set again at its top. The rest of the file is left as it was.
+func rewriteAccounts(change func(*Config) error) error {
+	path, err := Path()
+	if err != nil {
+		return err
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	current, err := parse(string(content), path)
+	if err != nil {
+		return err
+	}
+	if current.DefaultAccounts == nil {
+		current.DefaultAccounts = map[string]string{}
+	}
+	if err := change(&current); err != nil {
+		return err
+	}
+	// The file without its [[accounts]] tables: each runs from its header
+	// to the next header or the end.
+	var lines []string
+	inAccount := false
+	for _, line := range strings.Split(strings.TrimRight(string(content), "\n"), "\n") {
+		t := strings.TrimSpace(line)
+		if strings.HasPrefix(t, "[") {
+			inAccount = t == "[[accounts]]"
+		}
+		if !inAccount {
+			lines = append(lines, line)
+		}
+	}
+	updated := strings.TrimRight(strings.Join(lines, "\n"), "\n") + "\n"
+	for _, a := range current.Accounts {
+		updated += "\n[[accounts]]\n" +
+			"name = " + strconv.Quote(a.Name) + "\n" +
+			"agent = " + strconv.Quote(a.Agent) + "\n" +
+			"home = " + strconv.Quote(a.Home) + "\n"
+	}
+	keys := make([]string, 0, len(current.DefaultAccounts))
+	for k := range current.DefaultAccounts {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var parts []string
+	for _, k := range keys {
+		parts = append(parts, k+" = "+strconv.Quote(current.DefaultAccounts[k]))
+	}
+	value := "{}"
+	if len(parts) > 0 {
+		value = "{ " + strings.Join(parts, ", ") + " }"
+	}
+	updated = UpsertTopLevel(updated, "default_accounts", value)
+	if _, err := parse(updated, path); err != nil {
+		return fmt.Errorf("config: refusing to write the accounts: %w", err)
+	}
+	return writeFile(path, updated)
+}
+
 // AddAccount writes one more [[accounts]] at the end of the settings file,
 // where a table of its own cannot change what any key above it means. A
 // name the agent already has an account by is refused rather than doubled.

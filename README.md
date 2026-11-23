@@ -303,7 +303,11 @@ GitHub login becomes the active one (`gh auth switch`), or another account
 becomes the one Claude starts on — the agents tend starts, and a `claude`
 typed in a new terminal (`default_accounts` in the settings; the server
 gives each new terminal its directory). When one account runs out, the next
-agent goes on the other; the ones running stay where they are.
+agent goes on the other; the ones running stay where they are. The menu
+says which organization each Claude login is in — `own login · personal`,
+`work · Acme`, or `not logged in` — read from where Claude keeps it, since
+one e-mail can be in a Pro and a company's Team; and each account there can
+be renamed, or removed with its folder (typing `yes`).
 
 ### what agents did, and rules for them
 

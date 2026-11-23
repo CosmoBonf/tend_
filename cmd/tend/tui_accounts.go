@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -156,8 +157,132 @@ func (t *tui) openAccountsMenu(x, y int) {
 	t.mu.Lock()
 	list := t.github.list
 	t.mu.Unlock()
-	t.openMenu(ui.AccountsMenu(list, accountAgents(cfg), x, y))
+	agents := accountAgents(cfg)
+	for i := range agents {
+		agents[i].Orgs = accountOrgs(cfg, agents[i])
+	}
+	t.openMenu(ui.AccountsMenu(list, agents, x, y))
 	t.refreshGitHubAccounts(true)
+}
+
+// accountOrgs is which organization each of an agent's logins is in, read
+// from where the agent keeps it: the owner has one e-mail in two Claude
+// organizations, a Pro and a company Team, and the name an account was
+// given says nothing of which it is logged in to. Claude only: the others
+// keep no such thing tend knows how to read.
+func accountOrgs(cfg config.Config, ag ui.AgentAccounts) map[string]string {
+	if ag.ID != "claude" {
+		return nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	// The own login's is ~/.claude.json, beside ~/.claude; an account's is
+	// inside its directory.
+	orgs := map[string]string{"": claudeOrg(filepath.Join(home, ".claude.json"))}
+	for _, a := range cfg.AccountsFor("claude") {
+		orgs[a.Name] = claudeOrg(filepath.Join(a.HomeDir(), ".claude.json"))
+	}
+	return orgs
+}
+
+// claudeOrg is the organization a Claude Code config file says it is
+// logged in to — "personal" for the one an account has of its own — or
+// "not logged in". Only the organization's name is read, nothing secret.
+func claudeOrg(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "not logged in"
+	}
+	var v struct {
+		OAuth *struct {
+			Org string `json:"organizationName"`
+		} `json:"oauthAccount"`
+	}
+	if json.Unmarshal(data, &v) != nil || v.OAuth == nil || v.OAuth.Org == "" {
+		return "not logged in"
+	}
+	if strings.HasSuffix(v.OAuth.Org, "'s Organization") {
+		return "personal"
+	}
+	return v.OAuth.Org
+}
+
+// renameAccount gives an account another name, its directory and login
+// kept.
+func (t *tui) renameAccount(arg, to string) {
+	agent, from := ui.ParseAgentChoiceArg(arg)
+	if err := config.RenameAccount(agent, from, to); err != nil {
+		t.setMessage(err.Error(), true)
+		return
+	}
+	t.reloadAccounts()
+	t.setMessage(from+" is now "+to+" (spaces already open keep the old name)", false)
+}
+
+// removeAccount takes an account out of the settings and deletes its
+// directory, which holds its login: asked first, with yes typed. A
+// directory that is the agent's own, or not under the home, is never
+// deleted.
+func (t *tui) removeAccount(arg string) {
+	agent, name := ui.ParseAgentChoiceArg(arg)
+	cfg, _ := config.LoadLenient()
+	dir := ""
+	for _, a := range cfg.AccountsFor(agent) {
+		if a.Name == name {
+			dir = a.HomeDir()
+		}
+	}
+	if err := config.RemoveAccount(agent, name); err != nil {
+		t.setMessage(err.Error(), true)
+		return
+	}
+	t.reloadAccounts()
+	said := name + " removed"
+	if safeAccountDir(agent, dir) {
+		if err := os.RemoveAll(dir); err != nil {
+			said += "; its folder could not be deleted: " + err.Error()
+		} else {
+			said += ", and its folder " + tildeHome(dir)
+		}
+	} else if dir != "" {
+		said += "; its folder " + tildeHome(dir) + " was left, not being one tend made"
+	}
+	t.setMessage(said, false)
+}
+
+// safeAccountDir is whether tend may delete an account's directory: one
+// under the home, deeper than it, and not where the agent keeps its own
+// login. A hand-written home pointing at ~/.claude, or at /, is left alone.
+func safeAccountDir(agent, dir string) bool {
+	home, err := os.UserHomeDir()
+	if err != nil || dir == "" {
+		return false
+	}
+	clean := filepath.Clean(dir)
+	own := map[string]bool{
+		filepath.Join(home, "."+agent): true,
+		filepath.Join(home, ".claude"): true,
+		filepath.Join(home, ".codex"):  true,
+		filepath.Join(home, ".config"): true,
+	}
+	rel, err := filepath.Rel(home, clean)
+	return err == nil && rel != "." && !strings.HasPrefix(rel, "..") && !strings.Contains(rel, string(filepath.Separator)) && !own[clean]
+}
+
+// reloadAccounts takes the accounts and defaults just written into the
+// client's settings, for the bar.
+func (t *tui) reloadAccounts() {
+	cfg, err := config.LoadLenient()
+	if err != nil {
+		return
+	}
+	t.mu.Lock()
+	t.config.Accounts, t.config.DefaultAccounts = cfg.Accounts, cfg.DefaultAccounts
+	t.dirty = true
+	t.mu.Unlock()
+	t.wakeUp()
 }
 
 // switchGitHub makes a GitHub login the active one.
