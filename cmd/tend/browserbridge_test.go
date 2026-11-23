@@ -233,11 +233,14 @@ func TestEachBrowserComesUpWithTheExtensionWorking(t *testing.T) {
 				t.Skip("needs " + name)
 			}
 			// On GitHub's Ubuntu runner, Chromium and Edge come up and never
-			// attach the extension; Google Chrome on the same runner does,
-			// and all three do on the owner's machine. Not looked into
-			// further: the runner is not where tend's browsers run.
-			if os.Getenv("GITHUB_ACTIONS") == "true" && name != "google-chrome" {
-				t.Skip(name + " does not attach the extension on GitHub's runner")
+			// attach the extension, and Google Chrome attached in five runs
+			// of six — the sixth said "no browser attached" at fifteen
+			// seconds. All three attach every time on the owner's machine,
+			// where make check runs them. Not looked into further: the
+			// runner is not where tend's browsers run, and a test that is
+			// red there one run in six says nothing about the push.
+			if os.Getenv("GITHUB_ACTIONS") == "true" {
+				t.Skip(name + " does not attach the extension reliably on GitHub's runner")
 			}
 			session := strings.ReplaceAll(name, "-", "")
 			bin, env := startRealSession(t, session)
