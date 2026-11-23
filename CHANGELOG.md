@@ -21,6 +21,7 @@ release's notes on GitHub and what "what's new" shows inside tend.
 - **The mouse wheel the other way.** `mouse wheel: inverted` on the settings screen (`[ui] invert_wheel = true`) turns the wheel around everywhere — scrollback, the programs it goes to, the lists — for a system whose wheel or touchpad reaches the terminal reversed.
 
 #### Fixed
+- **A files panel that cannot start is not opened again and again.** With no `tend` on the PATH of the machine the session is on, the panel died as it started, before tend had seen it, and was docked again on every refresh — seventeen times in three seconds — leaving the client too busy to answer keys. A tab now counts the panel as had from the moment it is docked, and one that dies stays closed.
 - **An agent started on an account had no PATH, HOME or TERM.** The account's directory was given as the pane's whole environment, so the real Claude could not start on it. It is set in the agent's own start now, over the environment every pane has.
 - **Copying from the file preview.** The preview took the mouse for its wheel, so a drag selected nothing and a `.env`'s value could not be copied. A drag selects and copies now, without the line numbers, and `y` copies the whole file; `y` in the CI view copies a job's log.
 - **No files panel beside an ssh connection.** A connection's space no longer gets the panel by itself: it listed this machine's files beside the other machine's shell, in the width a wide `lxc list` needed. `ctrl+b f` still opens one there.

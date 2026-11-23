@@ -196,6 +196,18 @@ func (t *tui) ensureFiles() {
 			proto.PaneSpec{Command: filesCommand, Title: filesTitle}, filesTitle)
 		t.mu.Lock()
 		delete(t.filesEnsuring, tab)
+		if err == nil {
+			// Had from the moment it is docked, not from when a snapshot
+			// shows it: a panel that dies at once — no tend on the PATH of
+			// the machine the session is on — was gone before any snapshot,
+			// never counted as had, and docked again on the next refresh,
+			// seventeen times in three seconds, starving the client of the
+			// keys and frames it owed. Had and gone is closed: it stays so.
+			if t.filesHad == nil {
+				t.filesHad = map[uint64]bool{}
+			}
+			t.filesHad[tab] = true
+		}
 		t.mu.Unlock()
 		if err != nil {
 			t.setMessage("files panel: "+err.Error(), true)

@@ -550,3 +550,39 @@ func TestTheWheelTurnsTheOtherWayWhenSetTo(t *testing.T) {
 	a.wheelAt(t, 50, 8, true)
 	a.waitForScreen(t, "forward to the end again", func(s string) bool { return strings.Contains(s, "LINE-200") })
 }
+
+// TestAFilesPanelThatCannotStartIsNotDockedAgainAndAgain: with the panel
+// opening in every tab and no tend to run it — none on the PATH of the
+// machine the session is on — the panel dies as it starts, and the tab
+// counts it as closed rather than docking another on the next refresh. If
+// it regresses, tend docks a panel many times a second, as it did on
+// GitHub's runner, and the client falls behind on keys and frames: a
+// ctrl+b R went unanswered.
+func TestAFilesPanelThatCannotStartIsNotDockedAgainAndAgain(t *testing.T) {
+	t.Setenv("TEND_BIN_PATH", filepath.Join(t.TempDir(), "no-tend-here"))
+	cfg := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(cfg, []byte("[files]\nauto_open = true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	withConfig(t, cfg)
+	a := startSession(t, 120, 24)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌ 1 ") })
+	// Long enough for a loop to have docked dozens; a panel that died once
+	// is pane 2, and a new tab after it is 3.
+	time.Sleep(2 * time.Second)
+	a.send(t, "\x02c")
+	a.waitForScreen(t, "a new tab", func(s string) bool { return strings.Contains(s, "tab 2") })
+	title := a.lines()[1]
+	n := 0
+	if i := strings.Index(title, "┌ "); i >= 0 {
+		for _, r := range title[i+len("┌ "):] {
+			if r < '0' || r > '9' {
+				break
+			}
+			n = n*10 + int(r-'0')
+		}
+	}
+	if n == 0 || n > 4 {
+		t.Errorf("the new tab's pane is number %d: the panel was docked again and again\n%s", n, title)
+	}
+}
