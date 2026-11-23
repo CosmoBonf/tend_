@@ -1,6 +1,8 @@
 package main
 
 import (
+	"strings"
+
 	"github.com/auth-com-br/tend/internal/proto"
 )
 
@@ -24,18 +26,32 @@ const logRows = 12
 // pane until an agent writes it, which reads as an error.
 var logCommand = []string{"/bin/sh", "-c", `f="$HOME/tend-dev.log"; touch "$f"; exec tail -n 40 -F "$f"`}
 
-// logPaneLocked is the log pane in the tab shown, or 0.
-func (t *tui) logPaneLocked() uint64 {
+// isLogTitle is whether a pane is a log pane by its title: the button's,
+// or one opened by hand before the button, which the owner's tab had as
+// "claude · log" — not seeing it, the button offered to open a second.
+func isLogTitle(title string) bool {
+	return title == logTitle || strings.HasSuffix(title, "· "+logTitle)
+}
+
+// logPanesLocked is every log pane in the tab shown: the one the button
+// opened, known by number since its title is only the name it started
+// with and a program in it may set another, and any titled as one.
+func (t *tui) logPanesLocked() []uint64 {
 	inTab := map[uint64]bool{}
 	for _, r := range t.rects {
 		inTab[r.Pane] = true
 	}
+	var panes []uint64
+	opened := t.logPanes[t.tab]
+	if inTab[opened] {
+		panes = append(panes, opened)
+	}
 	for _, p := range t.snap.Panes {
-		if inTab[p.ID] && p.Title == logTitle {
-			return p.ID
+		if inTab[p.ID] && p.ID != opened && isLogTitle(p.Title) {
+			panes = append(panes, p.ID)
 		}
 	}
-	return 0
+	return panes
 }
 
 // toggleLog closes the tab's log pane, or opens one under the pane in
@@ -44,10 +60,30 @@ func (t *tui) logPaneLocked() uint64 {
 // it was, so a click on the button never takes the keyboard from the agent.
 func (t *tui) toggleLog() error {
 	t.mu.Lock()
-	if pane := t.logPaneLocked(); pane != 0 {
+	// One at a time, so a click that comes while the last one's pane is not
+	// in the snapshot yet does not open a second.
+	if t.logToggling {
 		t.mu.Unlock()
-		if err := t.client.ClosePane(pane); err != nil {
-			return err
+		return nil
+	}
+	t.logToggling = true
+	t.mu.Unlock()
+	defer func() {
+		t.mu.Lock()
+		t.logToggling = false
+		t.mu.Unlock()
+	}()
+
+	t.mu.Lock()
+	if panes := t.logPanesLocked(); len(panes) > 0 {
+		t.mu.Unlock()
+		// Every one in the tab: the owner's had the one opened by hand and
+		// the button's, and closing one left "▾ log" on the bar with a log
+		// still showing.
+		for _, pane := range panes {
+			if err := t.client.ClosePane(pane); err != nil {
+				return err
+			}
 		}
 		return t.refresh()
 	}
@@ -79,6 +115,12 @@ func (t *tui) toggleLog() error {
 		}
 		return err
 	}
+	t.mu.Lock()
+	if t.logPanes == nil {
+		t.logPanes = map[uint64]uint64{}
+	}
+	t.logPanes[t.tab] = created
+	t.mu.Unlock()
 	// A split halves the pane; the log takes logRows of it, by moving its
 	// top edge down as a drag on the divider would.
 	if half := rows / 2; half > logRows {
@@ -88,5 +130,6 @@ func (t *tui) toggleLog() error {
 	if focus != 0 {
 		t.focusPane(focus)
 	}
+	// The refresh is inside the guard, so the next click sees the pane.
 	return t.refresh()
 }

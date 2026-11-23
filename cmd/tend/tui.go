@@ -252,6 +252,10 @@ type tui struct {
 	filesHad      map[uint64]bool
 	filesEnsuring map[uint64]bool
 	filesByHand   map[uint64]bool
+	// logToggling is set while the log button's click is being carried out.
+	logToggling bool
+	// logPanes is the log pane the button opened in each tab.
+	logPanes map[uint64]uint64
 	// toolbarHover is the tool under the pointer (tui_toolbar.go).
 	toolbarHover string
 	// folded names the groups shut in this client's sidebar. Which groups a
@@ -1171,7 +1175,7 @@ func (t *tui) buildFrame() ui.Frame {
 		UpdateReady:  t.updateReadyLocked() != "",
 		Accounts:     t.accountsLabelLocked(t.config),
 		LogButton:    true,
-		LogOpen:      t.logPaneLocked() != 0,
+		LogOpen:      len(t.logPanesLocked()) > 0,
 		Navigator:    t.navigatorFrameLocked(),
 		Toast:        t.toastFrameLocked(),
 		LinkHover:    t.linkHover,

@@ -39,3 +39,20 @@ func TestTheLogButtonOpensAndHidesTheLivePane(t *testing.T) {
 		return !strings.Contains(s, "ok  all green") && strings.Contains(bar(), "▴ log")
 	})
 }
+
+// TestALogPaneOpenedByHandIsTheOneTheButtonHides: a pane titled
+// "claude · log", as the owner's was from before the button, is the log
+// pane — if it regresses, the bar says "▴ log" with a log showing, and
+// each click adds another pane beside the one it cannot see.
+func TestALogPaneOpenedByHandIsTheOneTheButtonHides(t *testing.T) {
+	for _, title := range []string{"log", "claude · log"} {
+		if !isLogTitle(title) {
+			t.Errorf("%q is not taken for the log pane", title)
+		}
+	}
+	for _, title := range []string{"files", "catalog", "✳ log in flow"} {
+		if isLogTitle(title) {
+			t.Errorf("%q is taken for the log pane", title)
+		}
+	}
+}
