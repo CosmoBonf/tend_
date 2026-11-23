@@ -52,6 +52,7 @@ func (t *tui) reloadSettings() error {
 	if prefix, err := cfg.PrefixKey(); err == nil {
 		t.keys.PrefixKey = prefix
 	}
+	t.keys.InvertWheel = cfg.UI.InvertWheel
 	if bindings, _, err := ui.BindingsFrom(cfg.Keys.Bind); err != nil {
 		t.setMessage(err.Error(), true)
 	} else {

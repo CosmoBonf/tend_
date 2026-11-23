@@ -18,6 +18,7 @@ release's notes on GitHub and what "what's new" shows inside tend.
 - **GitHub account...** on the sidebar's menu signs in to GitHub through the browser, or adds or switches accounts — the GitHub CLI's own login, which the issues, pull requests and CI use.
 - **CI for the repository.** Every push runs the gate on Linux, and builds on macOS and Windows, on GitHub Actions.
 - **The accounts in use, on the status bar.** Its right says the active GitHub login and the account Claude starts on — `git CosmoBonf · claude work` — and a click opens a menu to make another GitHub login active, or another account the one new agents and new terminals start on: for when one account runs out. Needs `tend handoff` once, for the server to give new terminals the account.
+- **The mouse wheel the other way.** `mouse wheel: inverted` on the settings screen (`[ui] invert_wheel = true`) turns the wheel around everywhere — scrollback, the programs it goes to, the lists — for a system whose wheel or touchpad reaches the terminal reversed.
 
 #### Fixed
 - **An agent started on an account had no PATH, HOME or TERM.** The account's directory was given as the pane's whole environment, so the real Claude could not start on it. It is set in the agent's own start now, over the environment every pane has.

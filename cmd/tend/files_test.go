@@ -517,3 +517,36 @@ func TestAnSSHConnectionsSpaceHasNoFilesPanelUnlessAskedFor(t *testing.T) {
 		t.Fatal("a panel opened by hand in the connection's space was put away")
 	}
 }
+
+// TestTheWheelTurnsTheOtherWayWhenSetTo: with [ui] invert_wheel, the wheel
+// read as down scrolls back into what a pane printed, and up comes forward
+// again — for a system whose wheel reaches the terminal reversed, as the
+// owner's did in every pane. If it regresses, the setting is written and
+// the wheel still goes the wrong way.
+func TestTheWheelTurnsTheOtherWayWhenSetTo(t *testing.T) {
+	log := filepath.Join(t.TempDir(), "x.log")
+	var lines strings.Builder
+	for i := 1; i <= 200; i++ {
+		lines.WriteString("LINE-" + itoa(1000 + i)[1:] + "\n")
+	}
+	if err := os.WriteFile(log, []byte(lines.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(cfg, []byte(quietSettings+"\n[ui]\ninvert_wheel = true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	withConfig(t, cfg)
+	a := startSession(t, 100, 20)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.send(t, "exec tail -n 40 -F "+log+"\r")
+	a.waitForScreen(t, "the end of the log", func(s string) bool { return strings.Contains(s, "LINE-200") })
+
+	a.wheelAt(t, 50, 8, false) // down, which is back here
+	a.wheelAt(t, 50, 8, false)
+	a.waitForScreen(t, "scrolled back", func(s string) bool { return !strings.Contains(s, "LINE-200") })
+	a.wheelAt(t, 50, 8, true)
+	a.wheelAt(t, 50, 8, true)
+	a.wheelAt(t, 50, 8, true)
+	a.waitForScreen(t, "forward to the end again", func(s string) bool { return strings.Contains(s, "LINE-200") })
+}

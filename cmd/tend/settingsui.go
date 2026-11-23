@@ -113,6 +113,11 @@ var settingRows = []settingRow{
 		value:   func(c config.Config) string { return config.Bool(c.UI.Mouse) },
 	},
 	{
+		label: "mouse wheel", section: "ui", key: "invert_wheel",
+		choices: []settingChoice{{"normal", "false"}, {"inverted", "true"}},
+		value:   func(c config.Config) string { return config.Bool(c.UI.InvertWheel) },
+	},
+	{
 		label: "notifications", section: "notify", key: "toasts",
 		choices: []settingChoice{{"on screen", `"tend"`}, {"terminal", `"terminal"`}, {"off", `"off"`}},
 		value:   func(c config.Config) string { return config.Quote(c.Toasts()) },

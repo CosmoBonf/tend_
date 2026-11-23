@@ -537,6 +537,10 @@ type Input struct {
 	// looked at first: a key the user gave a command of their own does that,
 	// as herdr lets a custom command take a default key.
 	Custom map[string]int
+	// InvertWheel turns the wheel the other way as it is read, so all that
+	// reads it — the scrollback, the programs it is passed on to (encoded
+	// again from the direction read), the lists — turns with it.
+	InvertWheel bool
 
 	armed bool
 	// pending holds an escape sequence being read after the prefix, so that
@@ -633,6 +637,14 @@ func (in *Input) FeedAll(data []byte) ([]byte, []Action, []MouseEvent) {
 		// not keys, and the prefix has nothing to do with them.
 		ev, n, incomplete := parseMouse(data[i:])
 		if n > 0 {
+			if in.InvertWheel {
+				switch ev.Kind {
+				case MouseWheelUp:
+					ev.Kind = MouseWheelDown
+				case MouseWheelDown:
+					ev.Kind = MouseWheelUp
+				}
+			}
 			mice = append(mice, ev)
 			i += n
 			continue

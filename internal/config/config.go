@@ -500,6 +500,10 @@ type Pane struct {
 // UI configures the interface.
 type UI struct {
 	Mouse bool `toml:"mouse"`
+	// InvertWheel turns the mouse wheel the other way, everywhere: for a
+	// system whose wheel or touchpad reaches the terminal reversed (the
+	// owner's, where up went down in every pane).
+	InvertWheel bool `toml:"invert_wheel"`
 	// Sidebar is what the sidebar's rows show, or, written as a boolean,
 	// tend's older way of saying whether it is shown. See sidebar.go.
 	Sidebar Sidebar `toml:"sidebar"`
@@ -1024,6 +1028,9 @@ scrollback = 5000
 [ui]
 # Click to focus a pane, drag a divider to resize, scroll to look back.
 mouse = true
+# The wheel the other way, everywhere: for a wheel or touchpad that reaches
+# the terminal reversed.
+# invert_wheel = false
 
 # Start with the spaces and agents down the left edge put away.
 sidebar_start_collapsed = false

@@ -110,6 +110,7 @@ func runAttach(args []string) error {
 		folded:        make(map[string]bool),
 	}
 	t.keys.PrefixKey = prefix
+	t.keys.InvertWheel = cfg.UI.InvertWheel
 	if bindings, notes, err := ui.BindingsFrom(cfg.Keys.Bind); err != nil {
 		// Said and then ignored: a mistyped binding must not stop tend from
 		// starting, and the keys it did understand still work.
