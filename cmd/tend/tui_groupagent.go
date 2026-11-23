@@ -141,6 +141,12 @@ func accountSlug(name string) string {
 // own, which are another machine's over --remote.
 const accountScript = `export "$1=$2"
 mkdir -p "$2" && "${TEND_BIN_PATH:-tend}" integration install "$3" >/dev/null 2>&1
+# A new account has no login yet: say how, once, before the agent starts.
+if [ -z "$(ls -A "$2" 2>/dev/null | grep -v -e '^hooks$' -e '^settings.json$' -e '^hooks.json$' -e '^config.toml$' -e '^tend-agent-state.sh$')" ]; then
+  echo "New account: log in inside the agent (/login in Claude, codex login in Codex)."
+  echo "The browser opens; if it does not, ctrl+click the link the agent shows."
+  echo
+fi
 shift 3
 "$@"
 exec "${SHELL:-/bin/sh}"`

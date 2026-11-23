@@ -13,7 +13,20 @@ import (
 // between them (gh keeps several); not, it signs in. tend keeps no token.
 
 // githubScript is what the tab runs, on the machine the session is on.
-const githubScript = `if ! command -v gh >/dev/null 2>&1; then
+//
+// gh's own login shows a code, copies it, and then waits for a second
+// enter before it opens the browser: the owner stopped at the first and
+// saw no browser. The tab says so before gh starts, with the address to
+// ctrl+click should the browser still not come.
+const githubScript = `say_login() {
+  echo
+  echo "  gh shows a code (already copied) and asks you to press Enter:"
+  echo "  press Enter AGAIN there, and the browser opens on GitHub."
+  echo "  Paste the code there and confirm. No browser? ctrl+click:"
+  echo "  https://github.com/login/device"
+  echo
+}
+if ! command -v gh >/dev/null 2>&1; then
   echo "tend uses the GitHub CLI for GitHub. Install it: https://cli.github.com"
 elif gh auth status --hostname github.com >/dev/null 2>&1; then
   gh auth status --hostname github.com
@@ -23,12 +36,11 @@ elif gh auth status --hostname github.com >/dev/null 2>&1; then
   case "$answer" in
   q*) ;;
   s*) gh auth switch --hostname github.com ;;
-  *) gh auth login --web --hostname github.com --git-protocol https ;;
+  *) say_login; gh auth login --web --clipboard --hostname github.com --git-protocol https ;;
   esac
 else
-  echo "Signing in to GitHub: a code is shown, and the browser opens to enter it."
-  echo
-  gh auth login --web --hostname github.com --git-protocol https
+  say_login
+  gh auth login --web --clipboard --hostname github.com --git-protocol https
 fi
 echo
 exec "${SHELL:-/bin/sh}"`
