@@ -54,6 +54,11 @@ const (
 	MenuGroupAgentStart = "menu-group-agent-start"
 	// MenuGitHub signs in to GitHub, or changes account, in a tab.
 	MenuGitHub = "menu-github"
+	// MenuGitHubSwitch makes the GitHub account in Arg the active one, and
+	// MenuDefaultAccount the account in Arg (AgentChoiceArg) the one its
+	// agent starts on; an Arg with no account is the agent's own login.
+	MenuGitHubSwitch   = "menu-github-switch"
+	MenuDefaultAccount = "menu-default-account"
 	// MenuAddAccount asks for the name of a new account of the agent in
 	// Arg, and starts the agent on it to log in.
 	MenuAddAccount = "menu-add-account"
@@ -521,6 +526,51 @@ func AgentChoiceArg(a AgentChoice) string {
 func ParseAgentChoiceArg(arg string) (id, account string) {
 	id, account, _ = strings.Cut(arg, "\x00")
 	return id, account
+}
+
+// GitHubAccount is one GitHub login the GitHub CLI holds.
+type GitHubAccount struct {
+	Login  string
+	Active bool
+}
+
+// AgentAccounts is one agent's accounts, for the accounts menu.
+type AgentAccounts struct {
+	ID, Name string
+	Accounts []string
+	// Default is the account it starts on, "" for its own login.
+	Default string
+}
+
+// AccountsMenu is the status bar's accounts: the GitHub logins, the active
+// one marked, a click making another active; and each agent's accounts,
+// the one new agents and terminals start on marked, a click making another
+// that. Each list ends in a way to add one.
+func AccountsMenu(github []GitHubAccount, agents []AgentAccounts, x, y int) Menu {
+	mark := func(on bool, label string) string {
+		if on {
+			return "● " + label
+		}
+		return "  " + label
+	}
+	items := []MenuItem{{Label: "GitHub"}}
+	for _, a := range github {
+		items = append(items, MenuItem{Label: mark(a.Active, a.Login), Action: MenuGitHubSwitch, Arg: a.Login})
+	}
+	if len(github) == 0 {
+		items = append(items, MenuItem{Label: "  not signed in"})
+	}
+	items = append(items, MenuItem{Label: "  + sign in to another...", Action: MenuGitHub})
+	for _, ag := range agents {
+		items = append(items, MenuItem{Label: ag.Name})
+		items = append(items, MenuItem{Label: mark(ag.Default == "", "own login"), Action: MenuDefaultAccount, Arg: ag.ID})
+		for _, acc := range ag.Accounts {
+			items = append(items, MenuItem{Label: mark(ag.Default == acc, acc), Action: MenuDefaultAccount,
+				Arg: AgentChoiceArg(AgentChoice{ID: ag.ID, Account: acc})})
+		}
+		items = append(items, MenuItem{Label: "  + new account...", Action: MenuAddAccount, Arg: ag.ID})
+	}
+	return Menu{Title: "accounts", Items: items, X: x, Y: y}
 }
 
 // GroupAgentMenu lists the agents that can be started in a group: each one

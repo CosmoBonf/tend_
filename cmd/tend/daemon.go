@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"text/tabwriter"
 	"time"
@@ -281,8 +282,17 @@ func runServe(args []string) error {
 	srvCfg.Plugins = pluginHost(pluginEnv)
 	srvCfg.CommandEnv = pluginEnv
 
+	// Every new pane starts on the default accounts (tui_accounts.go): a
+	// claude typed in a new terminal is on the one chosen in the status
+	// bar. Read from the settings by a watcher, not here: a pane's
+	// environment is made under the server's lock, where no file is read.
+	accounts := watchDefaultAccounts()
 	srvCfg.PaneEnv = func(id session.PaneID) []string {
-		return api.PaneEnv(apiPath, id, bin)
+		env := api.PaneEnv(apiPath, id, bin)
+		if extra := accounts.Load(); extra != nil {
+			env = append(env, *extra...)
+		}
+		return env
 	}
 	replacement := []string{self, "serve", "-s", *name, "-inherit",
 		"-cols", strconv.Itoa(*cols), "-rows", strconv.Itoa(*rows)}
@@ -693,4 +703,35 @@ func stateColorName(state string) string {
 	default:
 		return "\x1b[2m"
 	}
+}
+
+// watchDefaultAccounts keeps the default accounts' environment
+// (config.DefaultAccountEnv) as the settings file says it, looking every
+// two seconds whether the file changed. A choice made in the status bar
+// reaches the next pane within that.
+func watchDefaultAccounts() *atomic.Pointer[[]string] {
+	var current atomic.Pointer[[]string]
+	path, err := config.Path()
+	if err != nil {
+		return &current
+	}
+	var seen time.Time
+	read := func() {
+		info, err := os.Stat(path)
+		if err != nil || info.ModTime().Equal(seen) {
+			return
+		}
+		seen = info.ModTime()
+		if cfg, err := config.LoadLenient(); err == nil {
+			env := cfg.DefaultAccountEnv()
+			current.Store(&env)
+		}
+	}
+	read()
+	go func() {
+		for range time.Tick(2 * time.Second) {
+			read()
+		}
+	}()
+	return &current
 }

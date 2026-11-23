@@ -296,6 +296,15 @@ are installed in each account's directory on its first start, so its state
 is followed as the default account's is. The shell left when the agent
 exits is still on the account.
 
+The right of the status bar says the accounts in use — `git CosmoBonf ·
+claude work`: the active GitHub login, and the account Claude starts on
+(once it has others). A click there opens the accounts menu: another
+GitHub login becomes the active one (`gh auth switch`), or another account
+becomes the one Claude starts on — the agents tend starts, and a `claude`
+typed in a new terminal (`default_accounts` in the settings; the server
+gives each new terminal its directory). When one account runs out, the next
+agent goes on the other; the ones running stay where they are.
+
 ### what agents did, and rules for them
 
 The session server keeps a record of every agent: when it started and

@@ -139,7 +139,9 @@ func (t *tui) clickMenu(x, y int) (bool, error) {
 		t.closeMenu()
 		return true, nil
 	}
-	if !onItem {
+	if !onItem || item.Action == "" {
+		// Off the items, or on a heading (the accounts menu's): nothing to
+		// run, and the menu stays.
 		return true, nil
 	}
 	t.closeMenu()
@@ -323,6 +325,15 @@ func (t *tui) runMenu(m ui.Menu, item ui.MenuItem) error {
 
 	case ui.MenuGitHub:
 		return t.openGitHubAccount()
+
+	case ui.MenuGitHubSwitch:
+		go t.switchGitHub(item.Arg)
+		return nil
+
+	case ui.MenuDefaultAccount:
+		id, account := ui.ParseAgentChoiceArg(item.Arg)
+		t.setDefaultAccount(id, account)
+		return nil
 
 	case ui.MenuAddAccount:
 		t.mu.Lock()

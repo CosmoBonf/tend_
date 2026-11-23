@@ -17,6 +17,7 @@ release's notes on GitHub and what "what's new" shows inside tend.
 - **CI beside the branch.** The files panel shows how the commit checked out stands on GitHub Actions — `CI ✓`, `✗`, `●` running — and a click (or `C`) lists the branch's runs, each opening into its jobs and steps, live while it runs, with a step's log at its first error, a rerun of what failed and the run on github.com. A run seen running says when it ends, on the desktop once. Fifteen panels on one repository ask GitHub once between them.
 - **GitHub account...** on the sidebar's menu signs in to GitHub through the browser, or adds or switches accounts — the GitHub CLI's own login, which the issues, pull requests and CI use.
 - **CI for the repository.** Every push runs the gate on Linux, and builds on macOS and Windows, on GitHub Actions.
+- **The accounts in use, on the status bar.** Its right says the active GitHub login and the account Claude starts on — `git CosmoBonf · claude work` — and a click opens a menu to make another GitHub login active, or another account the one new agents and new terminals start on: for when one account runs out. Needs `tend handoff` once, for the server to give new terminals the account.
 
 #### Fixed
 - **An agent started on an account had no PATH, HOME or TERM.** The account's directory was given as the pane's whole environment, so the real Claude could not start on it. It is set in the agent's own start now, over the environment every pane has.

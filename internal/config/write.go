@@ -72,6 +72,54 @@ func SetTopLevel(key, value string) error {
 	return writeFile(path, updated)
 }
 
+// SetDefaultAccount makes an account the one an agent starts on, or the
+// agent's own login again when name is empty, kept as the top-level
+// default_accounts table.
+func SetDefaultAccount(agent, name string) error {
+	path, err := Path()
+	if err != nil {
+		return err
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+		content = []byte(Example)
+	}
+	current, err := parse(string(content), path)
+	if err != nil {
+		return err
+	}
+	defaults := map[string]string{}
+	for k, v := range current.DefaultAccounts {
+		defaults[k] = v
+	}
+	if name == "" {
+		delete(defaults, agent)
+	} else {
+		defaults[agent] = name
+	}
+	keys := make([]string, 0, len(defaults))
+	for k := range defaults {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var parts []string
+	for _, k := range keys {
+		parts = append(parts, k+" = "+strconv.Quote(defaults[k]))
+	}
+	value := "{ " + strings.Join(parts, ", ") + " }"
+	if len(parts) == 0 {
+		value = "{}"
+	}
+	updated := UpsertTopLevel(string(content), "default_accounts", value)
+	if _, err := parse(updated, path); err != nil {
+		return fmt.Errorf("config: refusing to write default_accounts: %w", err)
+	}
+	return writeFile(path, updated)
+}
+
 // AddAccount writes one more [[accounts]] at the end of the settings file,
 // where a table of its own cannot change what any key above it means. A
 // name the agent already has an account by is refused rather than doubled.

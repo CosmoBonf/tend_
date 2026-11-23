@@ -151,3 +151,36 @@ func TestAnAccountIsAddedOnceAndOnlyForAnAgentThatCanHaveOne(t *testing.T) {
 		t.Error("an account of aider, which has no directory of its own, was accepted")
 	}
 }
+
+// TestADefaultAccountIsKeptAndPutsNewPanesOnIt: SetDefaultAccount keeps
+// default_accounts at the top of the file, and DefaultAccountEnv is the
+// variable that puts a new pane on it; the agent's own login again takes
+// it out. If it regresses, a claude typed in a new terminal is on whichever
+// account its default directory holds, not the one chosen.
+func TestADefaultAccountIsKeptAndPutsNewPanesOnIt(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[ui]\nmouse = true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TEND_CONFIG", path)
+	if err := AddAccount(Account{Name: "work", Agent: "claude", Home: "/tmp/claude-work"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetDefaultAccount("claude", "work"); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.DefaultAccountEnv(); len(got) != 1 || got[0] != "CLAUDE_CONFIG_DIR=/tmp/claude-work" || !cfg.UI.Mouse {
+		t.Errorf("env %v, mouse %v", got, cfg.UI.Mouse)
+	}
+	if err := SetDefaultAccount("claude", ""); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _ = Load()
+	if got := cfg.DefaultAccountEnv(); len(got) != 0 {
+		t.Errorf("own login again, still %v", got)
+	}
+}

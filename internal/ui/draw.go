@@ -445,6 +445,10 @@ type Frame struct {
 	// UpdateReady puts herdr's "update ready" at the right of the status
 	// bar, from when a release is found until it is running.
 	UpdateReady bool
+	// Accounts is what the status bar says at its right of the accounts in
+	// use — "git CosmoBonf · claude work" — which a click opens the
+	// accounts menu on (StatusAccountsAt). Empty draws nothing.
+	Accounts string
 
 	// Menu is a context menu, opened on the thing it acts on. Nil when none
 	// is open.
@@ -1079,6 +1083,30 @@ func drawBox(dst *vt.Grid, r Rect, style vt.Style) {
 	setCell(dst, right, bottom, '┘', style)
 }
 
+// statusAccountsZone is where the accounts are on the status bar, from
+// the same arithmetic that draws them: against the right edge, left of
+// "update ready". ok is false when there are none, or no room.
+func statusAccountsZone(f Frame, cols int) (from, to int, ok bool) {
+	if f.Accounts == "" || cols < 60 {
+		return 0, 0, false
+	}
+	right := cols
+	if f.UpdateReady && cols > 40 {
+		right -= len(" update ready") + 1
+	}
+	w := runewidth.StringWidth(" " + f.Accounts + " ")
+	if w > right/2 {
+		return 0, 0, false
+	}
+	return right - w, right, true
+}
+
+// StatusAccountsAt reports whether a point is on the status bar's accounts.
+func StatusAccountsAt(f Frame, cols, rows, x, y int) bool {
+	from, to, ok := statusAccountsZone(f, cols)
+	return ok && y == rows-StatusRows && x >= from && x < to
+}
+
 func drawStatus(dst *vt.Grid, f Frame, theme Theme) {
 	y := dst.Rows() - StatusRows
 	if y < 0 {
@@ -1101,6 +1129,10 @@ func drawStatus(dst *vt.Grid, f Frame, theme Theme) {
 	if ready := " update ready"; f.UpdateReady && dst.Cols() > 40 {
 		limit -= len(ready) + 1
 		writeString(dst, limit, y, ready, theme.StatusUpdate, dst.Cols())
+	}
+	if from, to, ok := statusAccountsZone(f, dst.Cols()); ok {
+		writeString(dst, from, y, " "+f.Accounts+" ", theme.StatusKey, to)
+		limit = from
 	}
 
 	if f.Offline {

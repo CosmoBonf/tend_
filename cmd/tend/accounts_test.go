@@ -44,7 +44,10 @@ func TestAnAgentIsStartedOnAnAccountAddedFromTheMenu(t *testing.T) {
 
 	openNewAgent := func() {
 		t.Helper()
-		a.clickAt(t, 2, a.lineContaining(t, "new"))
+		// The footer itself, not only a pane: under the race detector the
+		// frame came before the sidebar's foot was drawn.
+		a.waitForScreen(t, "the spaces' new", func(s string) bool { return strings.Contains(s, "⇄ ssh menu") })
+		a.clickAt(t, 2, a.lineContaining(t, "⇄ ssh menu"))
 		a.waitForScreen(t, "the new menu", func(s string) bool { return strings.Contains(s, "new agent...") })
 		a.clickText(t, "new agent...")
 		a.waitForScreen(t, "the agents", func(s string) bool {
@@ -78,4 +81,53 @@ func TestAnAgentIsStartedOnAnAccountAddedFromTheMenu(t *testing.T) {
 
 	openNewAgent()
 	a.waitForScreen(t, "the account by name", func(s string) bool { return strings.Contains(s, "Claude Code · Work X") })
+}
+
+// TestTheStatusBarSaysTheAccountsAndSwitchesThem: the bar's right says the
+// active GitHub login and the account Claude starts on; a click there opens
+// the accounts menu, where an account becomes Claude's default — written to
+// the settings, which the server gives every new pane — and another GitHub
+// login is made the active one through gh. If it regresses, the owner
+// cannot see which account is in use, nor move to another when one runs
+// out.
+func TestTheStatusBarSaysTheAccountsAndSwitchesThem(t *testing.T) {
+	bin := t.TempDir()
+	calls := filepath.Join(t.TempDir(), "gh-calls")
+	gh := "#!/bin/sh\necho \"$*\" >> " + calls + "\n" +
+		"case \"$1 $2\" in \"auth status\") echo '{\"hosts\":{\"github.com\":[{\"login\":\"me\",\"active\":true},{\"login\":\"work-me\",\"active\":false}]}}' ;; esac\n"
+	if err := os.WriteFile(filepath.Join(bin, "gh"), []byte(gh), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv(skipGitHubAccountsEnv, "")
+	cfg := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(cfg, []byte(quietSettings+"\n[[accounts]]\nname = \"job\"\nagent = \"claude\"\nhome = \"~/.claude-job\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	withConfig(t, cfg)
+
+	a := startSession(t, 160, 30)
+	a.waitForScreen(t, "the accounts on the bar", func(string) bool {
+		return strings.Contains(a.lines()[len(a.lines())-1], "git me · claude own login")
+	})
+	bar := len(a.lines())
+	a.clickAt(t, columnOfString(a.lines()[bar-1], "claude own login")+2, bar)
+	a.waitForScreen(t, "the accounts menu", func(s string) bool {
+		return strings.Contains(s, "● own login") && strings.Contains(s, "  job") && strings.Contains(s, "● me")
+	})
+	a.clickText(t, "  job")
+	a.waitForScreen(t, "claude on job", func(string) bool {
+		return strings.Contains(a.lines()[len(a.lines())-1], "claude job")
+	})
+	if data, _ := os.ReadFile(cfg); !strings.Contains(string(data), `default_accounts = { claude = "job" }`) {
+		t.Errorf("the default was not written:\n%s", data)
+	}
+
+	a.clickAt(t, columnOfString(a.lines()[bar-1], "git me")+2, bar)
+	a.waitForScreen(t, "the menu again", func(s string) bool { return strings.Contains(s, "  work-me") })
+	a.clickText(t, "  work-me")
+	a.waitForScreen(t, "the switch said", func(string) bool { return strings.Contains(a.text(), "GitHub: now work-me") })
+	if data, _ := os.ReadFile(calls); !strings.Contains(string(data), "auth switch --hostname github.com --user work-me") {
+		t.Errorf("gh was asked %q", data)
+	}
 }

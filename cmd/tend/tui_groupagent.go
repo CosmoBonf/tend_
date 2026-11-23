@@ -99,6 +99,11 @@ func (t *tui) addAccount(agentID, name string) error {
 		t.setMessage(err.Error(), true)
 		return nil
 	}
+	if cfg, err := config.LoadLenient(); err == nil {
+		t.mu.Lock()
+		t.config.Accounts = cfg.Accounts
+		t.mu.Unlock()
+	}
 	t.setMessage(name+" added: log in to it in the space that opens", false)
 	return t.startAgentInGroup("", ui.AgentChoiceArg(ui.AgentChoice{ID: agentID, Account: name}))
 }

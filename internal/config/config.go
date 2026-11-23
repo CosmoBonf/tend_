@@ -47,6 +47,10 @@ type Config struct {
 	// Accounts are the logins an agent can be started with, tend's own and
 	// the owner's: two Claude accounts, or a company's, side by side.
 	Accounts []Account `toml:"accounts"`
+	// DefaultAccounts is the account each agent starts on when nothing
+	// says which, by agent and account name: the server gives every new
+	// pane its directory, so a claude typed in a new terminal is on it.
+	DefaultAccounts map[string]string `toml:"default_accounts"`
 	// Policy is what agents may and may not do (internal/policy). The
 	// server reads it again each time it checks, so a rule written here
 	// applies from the next agent on, with no restart.
@@ -72,6 +76,22 @@ func (a Account) HomeDir() string {
 		}
 	}
 	return a.Home
+}
+
+// DefaultAccountEnv is the environment that puts new panes on the default
+// accounts: each agent's variable set to its default account's directory.
+// An account the default names that is not there is left out.
+func (c Config) DefaultAccountEnv() []string {
+	var env []string
+	for agent, name := range c.DefaultAccounts {
+		for _, a := range c.AccountsFor(agent) {
+			if a.Name == name && integration.HomeEnv(agent) != "" {
+				env = append(env, integration.HomeEnv(agent)+"="+a.HomeDir())
+			}
+		}
+	}
+	sort.Strings(env)
+	return env
 }
 
 // AccountsFor are the accounts of one agent, in the order written.

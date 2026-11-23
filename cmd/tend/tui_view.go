@@ -367,6 +367,15 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 		if t.grabSidebarDivider(ev.X, ev.Y) || t.grabSidebarScrollbar(ev.X, ev.Y) {
 			return nil
 		}
+		t.mu.Lock()
+		onAccounts := ui.StatusAccountsAt(t.buildFrame(), t.cols, t.rows, ev.X, ev.Y)
+		t.mu.Unlock()
+		if onAccounts {
+			// Opened from the bar's last row; the menu is moved up onto the
+			// screen as any menu near the bottom is.
+			t.openAccountsMenu(ev.X, ev.Y)
+			return nil
+		}
 		if handled, err := t.clickTabBar(ev.X, ev.Y); handled {
 			return err
 		}

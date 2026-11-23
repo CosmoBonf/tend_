@@ -35,6 +35,8 @@ func TestMain(m *testing.M) {
 	// naming its own file must not read, or save over, the user's, which
 	// holds their passwords. One did read them, once.
 	os.Setenv(sshconn.PathEnv, filepath.Join(dir, "ssh.toml"))
+	// Nor the machine's GitHub login: the status bar would show it.
+	os.Setenv(skipGitHubAccountsEnv, "1")
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)

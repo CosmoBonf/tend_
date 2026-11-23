@@ -261,6 +261,9 @@ type tui struct {
 	// shows it, its groups folded, the form, and which space each open
 	// connection is in. All of it this person's, none of it sent.
 	ssh sshState
+	// github is the GitHub CLI's logins, for the status bar's accounts
+	// (tui_accounts.go).
+	github githubAccounts
 
 	prompt         promptKind
 	promptText     string
@@ -607,6 +610,9 @@ func (t *tui) ensureSession() error {
 // switched, the terminal resized — rather than on every frame: the layout is a
 // round trip, and panes change shape far less often than they change content.
 func (t *tui) refresh() error {
+	// The status bar's GitHub login, read again now and then (it costs
+	// nothing until it is due).
+	t.refreshGitHubAccounts(false)
 	// An event can ask for this before run has the connection (see run):
 	// there is nothing to re-read yet, and run reads it next anyway.
 	t.mu.Lock()
@@ -1162,6 +1168,7 @@ func (t *tui) buildFrame() ui.Frame {
 		SSHForm:      t.ssh.form,
 		EmptyHint:    t.emptyHintLocked(),
 		UpdateReady:  t.updateReadyLocked() != "",
+		Accounts:     t.accountsLabelLocked(t.config),
 		Navigator:    t.navigatorFrameLocked(),
 		Toast:        t.toastFrameLocked(),
 		LinkHover:    t.linkHover,
