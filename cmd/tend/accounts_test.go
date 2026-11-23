@@ -33,7 +33,7 @@ func TestAnAgentIsStartedOnAnAccountAddedFromTheMenu(t *testing.T) {
 		}
 	}
 	t.Setenv("HOME", home)
-	fake := "#!/bin/sh\ncase \"$1\" in --version) echo 9.9.9; exit 0;; esac\necho \"FAKE AGENT HOME=$CLAUDE_CONFIG_DIR\"\n"
+	fake := "#!/bin/sh\ncase \"$1\" in --version) echo 9.9.9; exit 0;; esac\necho \"FAKE AGENT HOME=$CLAUDE_CONFIG_DIR HOME-SET=${HOME:+yes}\"\n"
 	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(fake), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestAnAgentIsStartedOnAnAccountAddedFromTheMenu(t *testing.T) {
 
 	want := filepath.Join(home, ".claude-work-x")
 	a.waitForScreen(t, "the agent on the account", func(s string) bool {
-		return strings.Contains(s, "FAKE AGENT HOME="+want) && strings.Contains(a.sidebarText(), "Claude Code · Work X")
+		return strings.Contains(s, "FAKE AGENT HOME="+want+" HOME-SET=yes") && strings.Contains(a.sidebarText(), "Claude Code · Work X")
 	})
 	if info, err := os.Stat(want); err != nil || !info.IsDir() {
 		t.Errorf("the account's directory was not made: %v", err)

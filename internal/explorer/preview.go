@@ -2,6 +2,8 @@ package explorer
 
 import (
 	"bytes"
+	"encoding/base64"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -71,6 +73,24 @@ type Preview struct {
 	// editing is the o waiting for RunPreview to hand the terminal over.
 	editor  func() string
 	editing bool
+
+	// sel is a selection made with the mouse, and drawn the grid it is
+	// read from. The preview takes the mouse for the wheel, so tend hands
+	// it every press and drag and selects nothing itself — the owner could
+	// not copy a value out of a .env — and the preview does it, as a
+	// program that takes the mouse does, copying by OSC 52 on release.
+	sel      previewSel
+	drawn2   *vt.Grid
+	textFrom int
+	copied   bool // message is news, not a fault
+}
+
+// previewSel is a selection, from where the press was to where the
+// pointer is, in screen cells.
+type previewSel struct {
+	on, dragging bool
+	fromX, fromY int
+	toX, toY     int
 }
 
 // EditInPlace makes o edit the file in this pane: the preview steps aside
@@ -170,8 +190,13 @@ func (p *Preview) scroll(delta int) {
 
 // Key handles a key.
 func (p *Preview) Key(k Key) {
-	p.message = ""
+	p.message, p.copied = "", false
+	p.sel = previewSel{}
 	switch k.Name {
+	case "y":
+		if len(p.lines) > 0 && !p.image && !p.binary {
+			p.copy(strings.Join(p.lines, "\n") + "\n")
+		}
 	case "q", "esc", "ctrl+c":
 		p.quit = true
 	case "up", "k":
@@ -223,9 +248,95 @@ func (p *Preview) Key(k Key) {
 
 // Mouse scrolls with the wheel.
 func (p *Preview) Mouse(ev Mouse) {
-	if ev.Wheel != 0 {
+	switch {
+	case ev.Wheel != 0:
+		p.sel = previewSel{}
 		p.scroll(3 * ev.Wheel)
+	case ev.Press && !ev.Drag && ev.Button == 0:
+		p.message, p.copied = "", false
+		p.sel = previewSel{on: true, dragging: true, fromX: ev.X, fromY: ev.Y, toX: ev.X, toY: ev.Y}
+	case ev.Drag && p.sel.dragging:
+		p.sel.toX, p.sel.toY = ev.X, min(max(ev.Y, 1), max(p.rows-2, 1))
+	case ev.Release && p.sel.dragging:
+		p.sel.dragging = false
+		if p.sel.fromX == p.sel.toX && p.sel.fromY == p.sel.toY {
+			p.sel = previewSel{} // a click, not a selection
+			return
+		}
+		if text := p.selectedText(); text != "" {
+			p.copy(text)
+		}
 	}
+}
+
+// selOrdered is the selection from its first cell to its last.
+func (s previewSel) ordered() (x0, y0, x1, y1 int) {
+	x0, y0, x1, y1 = s.fromX, s.fromY, s.toX, s.toY
+	if y1 < y0 || y1 == y0 && x1 < x0 {
+		x0, y0, x1, y1 = x1, y1, x0, y0
+	}
+	return
+}
+
+// selected reports whether a cell is in the selection.
+func (s previewSel) selected(x, y int) bool {
+	if !s.on {
+		return false
+	}
+	x0, y0, x1, y1 := s.ordered()
+	switch {
+	case y < y0 || y > y1:
+		return false
+	case y0 == y1:
+		return x >= x0 && x <= x1
+	case y == y0:
+		return x >= x0
+	case y == y1:
+		return x <= x1
+	}
+	return true
+}
+
+// selectedText is what the selection covers on the screen, the line
+// numbers left out, each row's trailing blanks dropped.
+func (p *Preview) selectedText() string {
+	g := p.drawn2
+	if g == nil {
+		return ""
+	}
+	_, y0, _, y1 := p.sel.ordered()
+	var rows []string
+	for y := max(y0, 1); y <= y1 && y < g.Rows()-1; y++ {
+		row := g.Line(y)
+		var b strings.Builder
+		for x := p.textFrom; x < g.Cols(); x++ {
+			if !p.sel.selected(x, y) {
+				continue
+			}
+			c := row.Cell(x)
+			if c.Width == 0 && c.R == 0 {
+				continue // the second half of a wide character
+			}
+			r := c.R
+			if r == 0 {
+				r = ' '
+			}
+			b.WriteRune(r)
+		}
+		rows = append(rows, strings.TrimRight(b.String(), " "))
+	}
+	return strings.Join(rows, "\n")
+}
+
+// copy puts text on the clipboard of the machine the client is on, by the
+// OSC 52 tend passes on, and says so.
+func (p *Preview) copy(text string) {
+	fmt.Fprintf(clipboardOut, "\x1b]52;c;%s\x07", base64.StdEncoding.EncodeToString([]byte(text)))
+	n := strings.Count(text, "\n")
+	if !strings.HasSuffix(text, "\n") {
+		n++
+	}
+	p.message, p.copied = fmt.Sprintf("copied %d line%s", n, map[bool]string{true: "", false: "s"}[n == 1]), true
 }
 
 // Tick reads the file again when it changed on disk, keeping the place: an
@@ -265,7 +376,22 @@ func (p *Preview) Draw(g *vt.Grid) {
 		put(g, p.cols-1-len([]rune(size)), 0, size, styleDim, p.cols)
 	}
 
-	hint := "q close  o edit  w wrap"
+	// The selection, lit over what was drawn.
+	if p.sel.on {
+		for y := 1; y < p.rows-1; y++ {
+			row := g.Line(y)
+			for x := p.textFrom; x < p.cols; x++ {
+				if p.sel.selected(x, y) {
+					c := row.Cell(x)
+					c.Style.Attrs |= vt.AttrReverse
+					row.SetCell(x, c)
+				}
+			}
+		}
+	}
+	p.drawn2 = g
+
+	hint := "q close  o edit  w wrap  y copy all"
 	switch {
 	case p.image:
 		hint = "q close  o open"
@@ -277,7 +403,11 @@ func (p *Preview) Draw(g *vt.Grid) {
 		hint = "q close  o edit  w unwrap"
 	}
 	if p.message != "" {
-		put(g, 1, p.rows-1, truncate(p.message, p.cols-2), styleErr, p.cols)
+		style := styleErr
+		if p.copied {
+			style = styleGreen
+		}
+		put(g, 1, p.rows-1, truncate(p.message, p.cols-2), style, p.cols)
 	} else {
 		put(g, 1, p.rows-1, truncate(hint, p.cols-2), styleDim, p.cols)
 	}
@@ -290,6 +420,7 @@ func (p *Preview) drawLines(g *vt.Grid) {
 		gutter = len(strconv.Itoa(len(lines))) + 1
 	}
 	width := p.cols - gutter - 1
+	p.textFrom = gutter + 1
 	y := 1
 	for i := p.top; i < len(lines) && y < p.rows-1; i++ {
 		lit := numbered && i+1 == p.mark

@@ -567,6 +567,12 @@ func (m *Model) ciKey(k Key) {
 		if row.job >= 0 {
 			m.ciLog(run, c.jobs[run.ID][row.job])
 		}
+	case "y":
+		if row.job < 0 {
+			m.say("y copies a job's log: on a job or one of its steps", false)
+			break
+		}
+		m.ciCopyLog(c.jobs[run.ID][row.job])
 	}
 	if k.Rune == 'R' {
 		m.ci.next = time.Time{}
@@ -629,6 +635,21 @@ func (m *Model) ciRerun(r CIRun) {
 // ciLog shows a job's log in the preview tab, at the first error when it
 // has one.
 func (m *Model) ciLog(r CIRun, j CIJob) {
+	m.ciWithLog(j, func(m *Model, text, path string, line int) { m.preview(j.Name, path, line) })
+}
+
+// ciCopyLog puts a job's log on the clipboard, the owner's ask: to paste
+// it to an agent, or anywhere, without going through the browser.
+func (m *Model) ciCopyLog(j CIJob) {
+	m.ciWithLog(j, func(m *Model, text, path string, line int) {
+		m.copyText(text)
+		m.say(fmt.Sprintf("copied the log of %s (%d lines)", j.Name, strings.Count(text, "\n")), false)
+	})
+}
+
+// ciWithLog reads a job's log away from the loop, and hands it, cleaned
+// and kept in a file, to then.
+func (m *Model) ciWithLog(j CIJob, then func(m *Model, text, path string, line int)) {
 	if ciStateOf(j.Status, j.Conclusion) == ciRunning {
 		m.say("the log is GitHub's once the job ends; o opens it running", false)
 		return
@@ -649,7 +670,7 @@ func (m *Model) ciLog(r CIRun, j CIJob) {
 		if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
 			return func(m *Model) { m.fail(err) }
 		}
-		return func(m *Model) { m.preview(j.Name, path, line) }
+		return func(m *Model) { then(m, text, path, line) }
 	}
 	m.say("reading the log of "+j.Name+"…", false)
 }
@@ -793,5 +814,5 @@ func (m *Model) drawCI(g *vt.Grid) {
 			put(g, m.cols-rw-1, y, right, style, m.cols)
 		}
 	}
-	put(g, 1, m.rows-1, truncate("enter open · L log · r rerun · o browser · esc", m.cols-2), styleDim, m.cols)
+	put(g, 1, m.rows-1, truncate("enter open · L log · y copy log · r rerun · o browser · esc", m.cols-2), styleDim, m.cols)
 }

@@ -19,6 +19,8 @@ release's notes on GitHub and what "what's new" shows inside tend.
 - **CI for the repository.** Every push runs the gate on Linux, and builds on macOS and Windows, on GitHub Actions.
 
 #### Fixed
+- **An agent started on an account had no PATH, HOME or TERM.** The account's directory was given as the pane's whole environment, so the real Claude could not start on it. It is set in the agent's own start now, over the environment every pane has.
+- **Copying from the file preview.** The preview took the mouse for its wheel, so a drag selected nothing and a `.env`'s value could not be copied. A drag selects and copies now, without the line numbers, and `y` copies the whole file; `y` in the CI view copies a job's log.
 - **No files panel beside an ssh connection.** A connection's space no longer gets the panel by itself: it listed this machine's files beside the other machine's shell, in the width a wide `lxc list` needed. `ctrl+b f` still opens one there.
 - **Switching back to the first branch by name.** On `main`, `develop` dropped out of the files panel's branch list and `origin/develop` stood in for it; picking that failed with "a branch named 'develop' already exists". It is listed and switched to as the local branch it is.
 - **An empty space says how to fill it.** Closing a space's last pane leaves the space, empty — and the screen was blank, with no key that acts on a pane doing anything, so tend looked frozen. It now says "empty space · ctrl+b c opens a terminal".

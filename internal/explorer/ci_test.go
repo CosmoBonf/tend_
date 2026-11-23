@@ -3,11 +3,14 @@
 package explorer
 
 import (
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // fakeGH puts a stand-in gh first on PATH that answers from files in dir:
@@ -130,6 +133,15 @@ func TestTheBranchsCIIsBesideItAndOpensOnItsSteps(t *testing.T) {
 	if strings.Contains(string(log), "\r") || strings.Contains(string(log), "2026-11-22T") || !strings.Contains(string(log), "--- FAIL: TestX") {
 		t.Errorf("the log should be the lines alone:\n%s", log)
 	}
+	// y puts the same log on the clipboard, by the OSC 52 tend passes on.
+	var clip strings.Builder
+	clipboardOut = &clip
+	defer func() { clipboardOut = os.Stdout }()
+	keys(m, "y")
+	m.runCIJobNow()
+	if !strings.Contains(clip.String(), "\x1b]52;c;") || !strings.Contains(m.message, "copied the log of check (ubuntu)") {
+		t.Errorf("y did not copy the log: %q, footer %q", clip.String(), m.message)
+	}
 	raw, _ := os.ReadFile(filepath.Join(gh, "log.txt"))
 	if _, line := cleanCILog(raw); line != 3 {
 		t.Errorf("the log opens on line %d, not on the error's, 3", line)
@@ -161,5 +173,59 @@ func TestTheCIRepositoryIsTheOneTheBranchPushesTo(t *testing.T) {
 		if got != want {
 			t.Errorf("%s: %q, want %q", url, got, want)
 		}
+	}
+}
+
+// TestAPreviewCopiesWhatIsDraggedOverAndAllOnY: the preview takes the
+// mouse for its wheel, so tend selects nothing in it; a drag over its lines
+// selects them, lit, and letting go copies them by OSC 52 without the line
+// numbers; y copies the whole file. If it regresses, a value in a .env
+// cannot be copied out of the preview, as the owner found.
+func TestAPreviewCopiesWhatIsDraggedOverAndAllOnY(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".env")
+	writeFile(t, path, "DB_HOST=localhost\nDB_PASS=s3cret\nPORT=8080\n")
+	var clip strings.Builder
+	clipboardOut = &clip
+	defer func() { clipboardOut = os.Stdout }()
+	decoded := func() string {
+		t.Helper()
+		s := clip.String()
+		i := strings.LastIndex(s, "\x1b]52;c;")
+		if i < 0 {
+			return ""
+		}
+		b64 := strings.TrimSuffix(s[i+len("\x1b]52;c;"):], "\x07")
+		out, err := base64.StdEncoding.DecodeString(b64)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(out)
+	}
+
+	p := NewPreview(path, 0, nil)
+	g := vt.NewGrid(40, 10, 0)
+	p.Draw(g)
+	// Row 1 is DB_HOST, row 2 DB_PASS; from DB_PASS's value to its end.
+	x := p.textFrom + len("DB_PASS=")
+	p.Mouse(Mouse{X: x, Y: 2, Press: true})
+	p.Mouse(Mouse{X: 38, Y: 2, Press: true, Drag: true})
+	p.Draw(g)
+	if g.Line(2).Cell(x).Style.Attrs&vt.AttrReverse == 0 {
+		t.Error("the selection is not lit")
+	}
+	p.Mouse(Mouse{X: 38, Y: 2, Release: true})
+	if got := decoded(); got != "s3cret" {
+		t.Errorf("dragged over the value, copied %q", got)
+	}
+	// Over two lines, from the start of the first.
+	p.Mouse(Mouse{X: 0, Y: 1, Press: true})
+	p.Mouse(Mouse{X: 39, Y: 2, Press: true, Drag: true})
+	p.Mouse(Mouse{X: 39, Y: 2, Release: true})
+	if got := decoded(); got != "DB_HOST=localhost\nDB_PASS=s3cret" {
+		t.Errorf("two lines copied as %q", got)
+	}
+	p.Key(Key{Name: "y", Rune: 'y'})
+	if got := decoded(); got != "DB_HOST=localhost\nDB_PASS=s3cret\nPORT=8080\n" || !strings.Contains(p.message, "copied 3 lines") {
+		t.Errorf("y copied %q, said %q", got, p.message)
 	}
 }

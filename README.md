@@ -180,7 +180,8 @@ opens the panel's settings; `?` lists the keys.
   markdown rendered (`m` for the source), PNG, JPEG and GIF drawn in the
   terminal (`tend view` is that preview on its own). In the preview, `o`
   edits the file in the same tab, and saving and quitting the editor comes
-  back to the preview with what was saved. `s` stages a file or a folder;
+  back to the preview with what was saved. Dragging over the preview's text
+  copies it, without the line numbers; `y` copies the whole file. `s` stages a file or a folder;
   `m` or a right-click is the menu: new file or folder, rename, delete (type
   yes), copy the path, open with the system's app, reveal, change folder, a
   file's history. `/` or `ctrl+p` finds a file by name.
@@ -199,7 +200,8 @@ opens the panel's settings; `?` lists the keys.
   Actions: `CI ✓` passed, `CI ✗` failed, `CI ●` running, `CI –` no run of
   this commit yet. A click (or `C`) lists the branch's runs; Enter opens a
   run on its jobs and a job on its steps, as they move while it runs, and
-  Enter on a step shows the job's log, at its first error. `r` runs again
+  Enter on a step shows the job's log, at its first error; `y` copies that
+  log to the clipboard. `r` runs again
   what failed, `o` opens the run on github.com. When a run you saw running
   ends, the panel says so, and the desktop is told once. It is asked of the
   GitHub CLI (`gh`), with its login: **menu** → **GitHub account...** signs

@@ -123,13 +123,20 @@ func accountSlug(name string) string {
 	return "account"
 }
 
-// accountScript starts an agent on an account: its directory made if it is
-// new, tend's hooks put in it — they are per directory, and without them
-// tend would not hear what the agent is doing — then the agent, and a shell
-// after it, as resumeScript. The directory comes in the environment, so the
-// shell left behind starts the agent on the same account again.
-const accountScript = `mkdir -p "$1" && "${TEND_BIN_PATH:-tend}" integration install "$2" >/dev/null 2>&1
-shift 2
+// accountScript starts an agent on an account: the agent's variable set to
+// the account's directory ($1=$2), the directory made if it is new, tend's
+// hooks put in it — they are per directory, and without them tend would not
+// hear what the agent is doing — then the agent, and a shell after it, as
+// resumeScript. The variable is exported, so the shell left behind starts
+// the agent on the same account again.
+//
+// It is set here and not in the pane's Env: an Env is the whole
+// environment a pane starts with, and one naming only the account left the
+// agent with no PATH, HOME or TERM — the client cannot add the server's
+// own, which are another machine's over --remote.
+const accountScript = `export "$1=$2"
+mkdir -p "$2" && "${TEND_BIN_PATH:-tend}" integration install "$3" >/dev/null 2>&1
+shift 3
 "$@"
 exec "${SHELL:-/bin/sh}"`
 
@@ -174,15 +181,13 @@ func (t *tui) startAgentInGroup(group, arg string) error {
 	}
 	name := agent.Name
 	command := []string{"/bin/sh", "-c", resumeScript, "tend-agent", program}
-	var env []string
 	if account.Name != "" {
 		name += " · " + account.Name
-		home := account.HomeDir()
-		env = []string{integration.HomeEnv(agent.ID) + "=" + home}
-		command = []string{"/bin/sh", "-c", accountScript, "tend-agent", home, agent.ID, program}
+		command = []string{"/bin/sh", "-c", accountScript, "tend-agent",
+			integration.HomeEnv(agent.ID), account.HomeDir(), agent.ID, program}
 	}
 	err := t.newWorkspaceRunning(group, name, name, func(dir string) proto.PaneSpec {
-		spec := proto.PaneSpec{Command: command, Dir: dir, Env: env, Agent: agent.ID}
+		spec := proto.PaneSpec{Command: command, Dir: dir, Agent: agent.ID}
 		if dir == "" {
 			spec.DirOf = dirOf
 		}
