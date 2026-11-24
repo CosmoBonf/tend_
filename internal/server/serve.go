@@ -216,9 +216,18 @@ func (s *Server) serveConn(nc net.Conn) {
 // redrawing continuously marks itself dirty many times between ticks and is
 // sent once, so a client's traffic is bounded by time rather than by how noisy
 // its panes are.
+//
+// A pane quiet for a frame is sent at once instead, on its first output:
+// that is the echo of a key typed, which waited up to a whole frame for the
+// tick before anyone saw it. Over a VPN from a laptop the wait came on top
+// of the network's, and typing felt behind (the owner's report). A pane
+// that goes on writing is back on the tick from its second output, so the
+// bound on traffic holds: at most one screen per pane per frame, plus one.
 func (c *clientConn) pumpEvents(sub *Subscription, done <-chan struct{}) {
 	dirty := make(map[session.PaneID]bool)
-	tick := time.NewTicker(frameInterval)
+	sent := make(map[session.PaneID]time.Time)
+	interval := c.srv.cfg.FrameInterval
+	tick := time.NewTicker(interval)
 	defer tick.Stop()
 
 	for {
@@ -234,9 +243,17 @@ func (c *clientConn) pumpEvents(sub *Subscription, done <-chan struct{}) {
 				// Only panes this client asked for. A client showing one tab
 				// has no use for the others, and sending them would scale its
 				// traffic with the size of the whole session.
-				if c.isSubscribed(ev.Pane) {
-					dirty[ev.Pane] = true
+				if !c.isSubscribed(ev.Pane) {
+					continue
 				}
+				if !dirty[ev.Pane] && time.Since(sent[ev.Pane]) >= interval {
+					sent[ev.Pane] = time.Now()
+					if err := c.sendScreen(ev.Pane); err != nil {
+						return
+					}
+					continue
+				}
+				dirty[ev.Pane] = true
 				continue
 			}
 			if err := c.forward(ev); err != nil {
@@ -247,8 +264,10 @@ func (c *clientConn) pumpEvents(sub *Subscription, done <-chan struct{}) {
 			for id := range dirty {
 				delete(dirty, id)
 				if !c.isSubscribed(id) {
+					delete(sent, id)
 					continue
 				}
+				sent[id] = time.Now()
 				if err := c.sendScreen(id); err != nil {
 					return
 				}

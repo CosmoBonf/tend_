@@ -1175,6 +1175,7 @@ func (t *tui) buildFrame() ui.Frame {
 		UpdateReady:  t.updateReadyLocked() != "",
 		Accounts:     t.accountsLabelLocked(t.config),
 		LogButton:    true,
+		Remote:       t.remoteTargetLocked(),
 		LogOpen:      len(t.logPanesLocked()) > 0,
 		Navigator:    t.navigatorFrameLocked(),
 		Toast:        t.toastFrameLocked(),

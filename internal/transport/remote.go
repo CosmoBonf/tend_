@@ -54,13 +54,28 @@ func remoteTendWord() string {
 	return `"$( [ -x "$HOME/.local/bin/tend" ] && echo "$HOME/.local/bin/tend" || echo tend )"`
 }
 
+// sshOptions starts the ssh that carries a session, tuned for typing over
+// a slow link — the owner's laptop on a VPN, where typing stuck:
+//
+//   - Compression: what goes back is a pane's whole screen each frame, about
+//     6 KB of nearly the one before, and ssh's compression is one stream, so
+//     each screen is sent as its difference from the last. Measured on the
+//     owner's Claude pane while it worked: 47 KB/s, compressed 0.6 KB/s.
+//   - IPQoS: with no terminal (-T) ssh marks its packets as bulk transfer
+//     (TOS 8, seen with strace; cs1 on a newer ssh), which Wi-Fi puts in its
+//     background queue behind everything else. A session is typed into: it is
+//     marked interactive, as ssh marks one with a terminal.
+func sshOptions() []string {
+	return []string{"ssh", "-T", "-o", "Compression=yes", "-o", "IPQoS=af21"}
+}
+
 // RemoteArgv is the command that carries a session from host.
 func RemoteArgv(host, session string) []string {
 	program := os.Getenv(RemoteCommandEnv)
 	if program == "" {
 		// -T: no terminal on the far side. The protocol is binary, and a pty
 		// in the middle would translate line endings into it.
-		return []string{"ssh", "-T", host, remoteTendWord(), "bridge", "-s", session}
+		return append(sshOptions(), host, remoteTendWord(), "bridge", "-s", session)
 	}
 	// A wrapper is given the plain word: it may not run a shell at all.
 	word := RemoteTend

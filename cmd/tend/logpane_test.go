@@ -56,3 +56,37 @@ func TestALogPaneOpenedByHandIsTheOneTheButtonHides(t *testing.T) {
 		}
 	}
 }
+
+// TestTheStatusBarSaysHowToReachTheSessionAndCopiesIt: the bar shows the
+// ssh target another machine reaches this one by, and a click copies the
+// command to type there. If it regresses, the owner on the laptop has to
+// remember the address and the flag.
+func TestTheStatusBarSaysHowToReachTheSessionAndCopiesIt(t *testing.T) {
+	target := localTarget()
+	if target == "" {
+		t.Skip("this machine has no address another could reach it at")
+	}
+	a := startSession(t, 200, 30)
+	bar := func() string { return a.lines()[len(a.lines())-1] }
+	a.waitForScreen(t, "the remote shortcut", func(string) bool { return strings.Contains(bar(), "⇄ "+target) })
+	a.clickAt(t, columnOfString(bar(), "⇄ "+target)+3, len(a.lines()))
+	a.waitForScreen(t, "the command copied", func(s string) bool {
+		return strings.Contains(s, "copied: tend --remote "+target)
+	})
+}
+
+// TestTheAddressGivenIsAVPNsBeforeTheLANsAndNeverAContainersBridge: the
+// owner's machine has wg1 at 10.8.0.2, which the laptop reaches it by, a
+// LAN address, and docker's bridges. If it regresses, the bar names an
+// address the laptop cannot reach.
+func TestTheAddressGivenIsAVPNsBeforeTheLANsAndNeverAContainersBridge(t *testing.T) {
+	for name, want := range map[string]string{
+		"wg1": "vpn", "tun0": "vpn", "utun3": "vpn", "tailscale0": "vpn",
+		"enp3s0": "lan", "wlp2s0": "lan", "en0": "lan",
+		"docker0": "", "br-1a2b": "", "veth12": "", "lxdbr0": "", "virbr0": "",
+	} {
+		if got := interfaceKind(name); got != want {
+			t.Errorf("%s is %q, want %q", name, got, want)
+		}
+	}
+}

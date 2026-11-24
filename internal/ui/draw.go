@@ -455,6 +455,11 @@ type Frame struct {
 	LogOpen bool
 	// LogButton draws that button at all.
 	LogButton bool
+	// Remote is the ssh target another machine reaches the session by —
+	// "cf@10.8.0.2" — drawn as "⇄ cf@10.8.0.2" left of the log button,
+	// which a click copies the command for (StatusRemoteAt). Empty draws
+	// nothing.
+	Remote string
 
 	// Menu is a context menu, opened on the thing it acts on. Nil when none
 	// is open.
@@ -1131,6 +1136,34 @@ func statusLogLabel(f Frame) string {
 	return " ▴ log "
 }
 
+// statusRemoteZone is where the remote shortcut is: left of the log
+// button. It gives way when the bar is short, and while a message is up:
+// the message says what just happened, and with the shortcut there one
+// as long as "#42 already has a worktree: issue-42-…" was cut short.
+func statusRemoteZone(f Frame, cols int) (from, to int, ok bool) {
+	if f.Remote == "" || f.Message != "" || cols < 100 {
+		return 0, 0, false
+	}
+	right, _, ok := statusLogZone(f, cols)
+	if !ok {
+		return 0, 0, false
+	}
+	w := runewidth.StringWidth(statusRemoteLabel(f))
+	if w > right/3 {
+		return 0, 0, false
+	}
+	return right - w, right, true
+}
+
+func statusRemoteLabel(f Frame) string { return " ⇄ " + f.Remote + " " }
+
+// StatusRemoteAt reports whether a point is on the status bar's remote
+// shortcut.
+func StatusRemoteAt(f Frame, cols, rows, x, y int) bool {
+	from, to, ok := statusRemoteZone(f, cols)
+	return ok && y == rows-StatusRows && x >= from && x < to
+}
+
 // StatusLogAt reports whether a point is on the status bar's log button.
 func StatusLogAt(f Frame, cols, rows, x, y int) bool {
 	from, to, ok := statusLogZone(f, cols)
@@ -1172,6 +1205,10 @@ func drawStatus(dst *vt.Grid, f Frame, theme Theme) {
 	}
 	if from, to, ok := statusLogZone(f, dst.Cols()); ok {
 		writeString(dst, from, y, statusLogLabel(f), theme.StatusKey, to)
+		limit = from
+	}
+	if from, to, ok := statusRemoteZone(f, dst.Cols()); ok {
+		writeString(dst, from, y, statusRemoteLabel(f), theme.StatusKey, to)
 		limit = from
 	}
 

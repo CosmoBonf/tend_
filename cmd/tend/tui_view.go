@@ -371,7 +371,12 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 		frame := t.buildFrame()
 		onAccounts := ui.StatusAccountsAt(frame, t.cols, t.rows, ev.X, ev.Y)
 		onLog := ui.StatusLogAt(frame, t.cols, t.rows, ev.X, ev.Y)
+		onRemote := ui.StatusRemoteAt(frame, t.cols, t.rows, ev.X, ev.Y)
 		t.mu.Unlock()
+		if onRemote {
+			t.copyRemoteCommand()
+			return nil
+		}
 		if onLog {
 			return t.toggleLog()
 		}

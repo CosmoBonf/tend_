@@ -241,6 +241,14 @@ agent list, clicking a row goes there — a pane, a tab, or a whole space. A pan
 running something that wants the mouse itself, an editor say, gets the clicks
 instead.
 
+### From another machine
+
+`tend --remote user@host` on another computer opens the session running on
+this one, over ssh. The status bar shows the target to use — `⇄ cf@10.8.0.2`,
+a VPN's address when there is one — and a click copies the whole command.
+The ssh is compressed and marked as interactive, and a key's echo comes back
+at once, so typing from a laptop over a VPN keeps up.
+
 ### ssh connections
 
 `⇄ ssh`, beside `menu` at the foot of the spaces list, turns that list into

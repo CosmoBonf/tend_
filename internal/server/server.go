@@ -183,6 +183,10 @@ type Config struct {
 	Catalog *detect.Catalog
 	// DetectInterval is how often panes are re-examined. Zero picks a default.
 	DetectInterval time.Duration
+	// FrameInterval paces how often a client is sent a pane's screen. Zero
+	// picks frameInterval; a test makes it long to tell an echo sent at
+	// once from one that waited for the tick.
+	FrameInterval time.Duration
 	// DefaultSize is the terminal size a pane starts at, before a client
 	// attaches and resizes it.
 	DefaultSize pty.Size
@@ -437,6 +441,9 @@ func build(cfg Config) (*Server, error) {
 	}
 	if cfg.DetectInterval <= 0 {
 		cfg.DetectInterval = defaultDetectInterval
+	}
+	if cfg.FrameInterval <= 0 {
+		cfg.FrameInterval = frameInterval
 	}
 	if !cfg.DefaultSize.Valid() {
 		cfg.DefaultSize = pty.DefaultSize

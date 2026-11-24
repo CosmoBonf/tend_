@@ -84,6 +84,12 @@ type harness struct {
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
+	return newHarnessWith(t, server.Config{})
+}
+
+// newHarnessWith is newHarness with a server configured as given.
+func newHarnessWith(t *testing.T, cfg server.Config) *harness {
+	t.Helper()
 
 	// A private runtime directory per test, so a test never touches a real
 	// session or another test's.
@@ -98,10 +104,9 @@ func newHarness(t *testing.T) *harness {
 		t.Fatalf("Listen: %v", err)
 	}
 
-	srv, err := server.New(server.Config{
-		DetectInterval: 10 * time.Millisecond,
-		DefaultSize:    pty.Size{Cols: 80, Rows: 24},
-	})
+	cfg.DetectInterval = 10 * time.Millisecond
+	cfg.DefaultSize = pty.Size{Cols: 80, Rows: 24}
+	srv, err := server.New(cfg)
 	if err != nil {
 		t.Fatalf("server.New: %v", err)
 	}
